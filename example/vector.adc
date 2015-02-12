@@ -1,0 +1,26 @@
+typedef struct $<name_2>_s
+{
+    union
+    {
+        struct
+        {
+            $<type> x;
+            $<type> y;
+        };
+        $<type> d[2];
+    };
+} $<name_2>;
+
+typedef struct $<name_3>_s
+{
+    union
+    {
+        struct
+        {
+            $<type> x;
+            $<type> y;
+            $<type> z;
+        };
+        $<type> d[3];
+    };
+} $<name_3>;
