@@ -97,8 +97,8 @@ void adc_expand(
         char* name = va_arg(ap, char*);
         char* subst = va_arg(ap, char*);
 
-		Token tk_name = { name, strlen(name) };
-		Token tk_subst = { subst, strlen(subst) };
+        Token tk_name = { name, strlen(name) };
+        Token tk_subst = { subst, strlen(subst) };
 
         Binding binding = { tk_name, tk_subst };
         sb_push(bindings, binding);
@@ -126,7 +126,7 @@ void adc_expand(
 
     char prev = 0;
     char* name = NULL;
-	int name_len = 0;
+    int name_len = 0;
     for (int i = 0; i < data_size; ++i)
     {
         char c = in_data[i];
@@ -153,13 +153,13 @@ void adc_expand(
             else if (lexer_state == LEX_INSIDE && c == '>')
             {
                 // add token
-				sb_push(name, '\0');
+                sb_push(name, '\0');
                 Token token;
                 token.str = name;
-				token.len = name_len;
-				name = NULL;
+                token.len = name_len;
+                name = NULL;
                 sb_push(tokens, token);
-				name_len = 0;
+                name_len = 0;
                 lexer_state = LEX_NOTHING;
 
                 // Do stupid search on args to get matching subst.
@@ -173,7 +173,7 @@ void adc_expand(
                             char c = binding.substitution.str[j];
                             sb_push(out_data, c);
                         }
-						break;
+                        break;
                     }
                 }
             }
