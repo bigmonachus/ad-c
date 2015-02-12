@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "stb_sb.h"
 
@@ -22,7 +23,7 @@ void adc_expand(
 
 // ============================================================
 
-const size_t bytes_in_fd(FILE* fd)
+static const size_t bytes_in_fd(FILE* fd)
 {
     fpos_t fd_pos;
     fgetpos(fd, &fd_pos);
@@ -61,7 +62,7 @@ void adc_clear_file(const char* path)
 typedef struct
 {
     char* str;
-    int len;
+    size_t len;
 } Token;
 
 typedef struct
@@ -76,7 +77,6 @@ enum
     LEX_DOLLAR,
     LEX_BEGIN,
     LEX_INSIDE,
-    LEX_END,
 };
 
 void adc_expand(
@@ -90,7 +90,7 @@ void adc_expand(
     Binding* bindings = NULL;
 
     va_list ap;
-    int i;
+
     va_start(ap, num_bindings);
     for (int i = 0; i < num_bindings; ++i)
     {
@@ -111,7 +111,7 @@ void adc_expand(
     const char* in_data = slurp_file(tmpl_path, &data_size);
     char* out_data = NULL;
 
-    int path_len = strlen(tmpl_path);
+    size_t path_len = strlen(tmpl_path);
     sb_push(out_data, '/'); sb_push(out_data, '/');
     for (int i = 0; i < path_len; ++i)
     {

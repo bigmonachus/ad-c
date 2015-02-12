@@ -2,7 +2,8 @@ ad-C
 ====
 
 A tool to do metaprogramming with C99.
-example/ shows how it is used.
+
+`adc/example/` shows how it is used.
 
 Features
 --------
