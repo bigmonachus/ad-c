@@ -63,12 +63,12 @@ typedef struct
 {
     char* str;
     size_t len;
-} Token;
+} TemplateToken;
 
 typedef struct
 {
-    Token name;
-    Token substitution;
+    TemplateToken name;
+    TemplateToken substitution;
 } Binding;
 
 enum
@@ -97,8 +97,8 @@ void adc_expand(
         char* name = va_arg(ap, char*);
         char* subst = va_arg(ap, char*);
 
-        Token tk_name = { name, strlen(name) };
-        Token tk_subst = { subst, strlen(subst) };
+        TemplateToken tk_name = { name, strlen(name) };
+        TemplateToken tk_subst = { subst, strlen(subst) };
 
         Binding binding = { tk_name, tk_subst };
         sb_push(bindings, binding);
@@ -120,7 +120,7 @@ void adc_expand(
     sb_push(out_data, '\n');
     sb_push(out_data, '\n');
 
-    Token* tokens = NULL;
+    TemplateToken* tokens = NULL;
 
     int lexer_state = LEX_NOTHING;
 
@@ -154,7 +154,7 @@ void adc_expand(
             {
                 // add token
                 sb_push(name, '\0');
-                Token token;
+                TemplateToken token;
                 token.str = name;
                 token.len = name_len;
                 name = NULL;
