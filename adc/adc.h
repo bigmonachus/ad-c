@@ -223,61 +223,137 @@ static int is_whitespace(char c)
     return 0;
 }
 
+static int is_ident_char(char c)
+{
+    char idents[]=
+        {
+            'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+            'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F',
+            'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
+            'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+            '_',
+            '.', // We treat accessors as part of the identifier
+            ':', // special support for light c++
+        };
+    for (int i = 0; i < sizeof(idents); ++i)
+    {
+        if (c == idents[i])
+            return 1;
+    }
+    return 0;
+}
+
+/* static int is_operator(char c) */
+/* { */
+/*     return ( */
+/*             c == '*' | */
+/*             c == '/' | */
+/*             c == '+' | */
+/*             c == '-' | */
+/*             c == '%' | */
+/*             c == '=' | */
+/*             c == '^' | */
+/*             c == '|' | */
+/*             c == '&' */
+/*            ); */
+/* } */
+
 enum
 {
     LEX_BEGIN_LINE,
     LEX_WAIT_FOR_NEWLINE,
     LEX_ONE_SLASH,
+    LEX_RECEIVING,
+    LEX_INSIDE_STRING,
+    LEX_INSIDE_CHAR,
 };
-
-typedef enum
-{
-    TOK_TYPEDEF,
-    TOK_STRUCT,
-} Token;
-
 
 static void process_file(FILE* out_fd, const char* fname)
 {
     size_t file_size;
     const char* file_contents = slurp_file(fname, &file_size);
     int lex_state = LEX_BEGIN_LINE;
-
-    Token* file_tokens = 0;
-    char*  idents = 0;
-    int*   idents_i = 0;
-
     if (file_contents)
     {
+
+        char** idents = 0;
+        char* curtok = 0;
+        char prev_c = 0;
+
         for (int i = 0; i < file_size; ++i)
         {
             char c = file_contents[i];
-            if (lex_state == LEX_WAIT_FOR_NEWLINE && c == '\n')
+            ///////////
+            // HANDLE STUFF THAT SHOULD BE IGNORED
+            // ////////
+            if ( lex_state == LEX_WAIT_FOR_NEWLINE && c == '\n' )
             {
                 lex_state = LEX_BEGIN_LINE;
             }
-            else if (lex_state == LEX_BEGIN_LINE && c == '#')
+            else if ( lex_state == LEX_BEGIN_LINE && c == '#' )
             {
                 lex_state = LEX_WAIT_FOR_NEWLINE;
             }
             else if ( lex_state == LEX_BEGIN_LINE && is_whitespace(c) )
             {
-                continue;
+                lex_state = LEX_RECEIVING;
             }
-            else if (/* TODO: contitions for single line comment && */ c == '/')
+            else if ( (lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE) && c == '/')
             {
                 lex_state = LEX_ONE_SLASH;
             }
-            else if (lex_state == LEX_ONE_SLASH && c == '/')
+            else if ( lex_state == LEX_ONE_SLASH && c == '/' )
             {
                 lex_state = LEX_WAIT_FOR_NEWLINE;
+            }
+            else if (lex_state == LEX_BEGIN_LINE && c == '\n')
+            {
+                lex_state = LEX_BEGIN_LINE;
+            }
+            ////////
+            // Handle strings
+            ////////
+
+            else if ( (lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE) && c == '\"' )
+            {
+                lex_state = LEX_INSIDE_STRING;
+            }
+            else if ( lex_state == LEX_INSIDE_STRING && c == '\"' && prev_c != '\\' )
+            {
+                lex_state = LEX_RECEIVING;
+            }
+            else if ( (lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE) && c == '\'' )
+            {
+                lex_state = LEX_INSIDE_CHAR;
+            }
+            else if ( lex_state == LEX_INSIDE_CHAR && c == '\''  && prev_c != '\\' )
+            {
+                lex_state = LEX_RECEIVING;
             }
             ////////
             // parse token
             ///////
-            else
+            else if ( lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE )
             {
+                lex_state = LEX_RECEIVING;
+                if (is_ident_char(c))
+                {
+                    sb_push(curtok, c);
+                }
+                else  // Finish token
+                {
+                    // Handle empty line.
+                    if (!curtok)
+                    {
+                        continue;
+                    }
+                    sb_push(curtok, '\0');
+                    puts(curtok);
+                    // Do something with token
+                    curtok = 0;  // Reset token
+                }
             }
+            prev_c = c;
         }
     }
     else
