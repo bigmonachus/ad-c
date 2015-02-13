@@ -5,7 +5,7 @@ A tool to do metaprogramming with C99.
 
 `adc/example/` shows how it is used.
 
-_Warning_ `#include <adc.h>` in Windows, without properly speficying the Include dir for adc, will by default load a Windows SDK header!
+_Warning_ `#include <adc.h>` in Windows, without properly specifying the Include directory for adc, will by default load a Windows SDK header!
 
 Features
 --------
