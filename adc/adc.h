@@ -1,10 +1,17 @@
 #pragma once
 
 #include <assert.h>
+#ifndef _WIN32
+#include <dirent.h>
+#endif
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include "win_dirent.h"
+#endif
 
 #include "stb_sb.h"
 
@@ -17,9 +24,15 @@ void adc_clear_file(const char* fname);
 // NOTE: this function dumbly replaces text. It doesn't care about grammar.
 // e.g. it will replace tokens inside of strings.
 void adc_expand(
-        const char* result_path,
+        const char* output_path,
         const char* tmpl_path,
         ...);
+
+// Searches for *.c *.h *.cpp and *.cc files in directory_path, parses them,
+// and generates type info at output_path
+void adc_type_info(
+        const char* output_path,
+        const char* directory_path);
 
 // ============================================================
 
@@ -71,20 +84,20 @@ typedef struct
     TemplateToken substitution;
 } Binding;
 
-enum
-{
-    LEX_NOTHING,
-    LEX_DOLLAR,
-    LEX_BEGIN,
-    LEX_INSIDE,
-};
-
 void adc_expand(
         const char* result_path,
         const char* tmpl_path,
         const int num_bindings,
         ...)
 {
+    enum
+    {
+        LEX_NOTHING,
+        LEX_DOLLAR,
+        LEX_BEGIN,
+        LEX_INSIDE,
+    };
+
     // Get bindings
 
     Binding* bindings = NULL;
@@ -185,4 +198,152 @@ void adc_expand(
 
     fwrite(out_data, sizeof(char), sb_count(out_data), out_fd);
     fclose(out_fd);
+}
+
+// Note:
+//  Parser should output defines of the form
+//  #define ADCTYPE_FILE_filename_SCOPE_scope_NAME_name
+//  `scope` can be 'global' or the name of a top level function/struct/enum
+//      e.g. my_file.c has a global int variable named foo
+//      therefore we have:
+//      #define ADCTYPE_FILE_my_file_SCOPE_global_NAME_foo int
+
+
+static int is_whitespace(char c)
+{
+    if (
+            c == ' '  |
+            c == '\v' |
+            c == '\t' |
+            c == '\r'
+       )
+    {
+        return 1;
+    }
+    return 0;
+}
+
+enum
+{
+    LEX_BEGIN_LINE,
+    LEX_WAIT_FOR_NEWLINE,
+    LEX_ONE_SLASH,
+};
+
+typedef enum
+{
+    TOK_TYPEDEF,
+    TOK_STRUCT,
+} Token;
+
+
+static void process_file(FILE* out_fd, const char* fname)
+{
+    size_t file_size;
+    const char* file_contents = slurp_file(fname, &file_size);
+    int lex_state = LEX_BEGIN_LINE;
+
+    Token* file_tokens = 0;
+    char*  idents = 0;
+    int*   idents_i = 0;
+
+    if (file_contents)
+    {
+        for (int i = 0; i < file_size; ++i)
+        {
+            char c = file_contents[i];
+            if (lex_state == LEX_WAIT_FOR_NEWLINE && c == '\n')
+            {
+                lex_state = LEX_BEGIN_LINE;
+            }
+            else if (lex_state == LEX_BEGIN_LINE && c == '#')
+            {
+                lex_state = LEX_WAIT_FOR_NEWLINE;
+            }
+            else if ( lex_state == LEX_BEGIN_LINE && is_whitespace(c) )
+            {
+                continue;
+            }
+            else if (/* TODO: contitions for single line comment && */ c == '/')
+            {
+                lex_state = LEX_ONE_SLASH;
+            }
+            else if (lex_state == LEX_ONE_SLASH && c == '/')
+            {
+                lex_state = LEX_WAIT_FOR_NEWLINE;
+            }
+            ////////
+            // parse token
+            ///////
+            else
+            {
+            }
+        }
+    }
+    else
+    {
+        fprintf(stderr, "Could not open file for processing, %s\n", fname);
+    }
+
+}
+
+void adc_type_info(
+        const char* output_path,
+        const char* directory_path)
+{
+    assert(output_path);
+    assert(directory_path);
+
+    printf("DEBUG==== BEGIN adc_type_info\n");
+
+    FILE* fd = fopen(output_path, "w+");
+    if (!fd)
+    {
+        fprintf(stderr, "Could not open file %s for writing.\n", output_path);
+        exit(-1);
+    }
+    // Traverse directory, fill filename array
+    DIR* dirstack[256] = { 0 };
+    int dircount = 0;
+
+    DIR* dir = opendir(directory_path);
+    dirstack[dircount++] = dir;
+    while (dircount)
+    {
+        DIR* dir = dirstack[--dircount];
+        struct dirent* ent = readdir(dir);
+        char fname[1024];
+        while(ent)
+        {
+            fname[0] = '\0';
+            strcat(fname, dir->name);
+            fname[strlen(fname) - 1] = '\0'; // Remove * character
+            strcat(fname, ent->d_name);
+
+            const size_t fname_len = strlen(fname);
+            if (fname[fname_len - 1] != '.')
+            {
+                DIR* sub_dir = opendir(fname);
+                if (sub_dir)
+                {
+                    dirstack[dircount++] = sub_dir;
+                }
+                else  // Is a file.
+                {
+                    printf("%s\n", fname);
+                    process_file(fd, fname);
+                }
+            }
+            ent = readdir(dir);
+        }
+
+        closedir(dir);
+    }
+
+
+    // TODO:
+    //  Generate tokens and ids
+    // ident ident assign expr; ===== second ident is a type
+    //
+    printf("DEBUG==== END adc_type_info\n");
 }

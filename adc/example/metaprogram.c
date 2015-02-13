@@ -20,4 +20,8 @@ int main()
             "name_2", "v2i",
             "name_3", "v3i",
             "type", "int32_t");
+
+    adc_type_info(
+            "types.h",
+            "./dummy_project");
 }
