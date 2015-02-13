@@ -33,7 +33,7 @@ int main()
 
     }
 
-    int not_useful = 0;
+    const int not_useful = 0;
     do {
         // Nothing!
         /* Seriously, nothing // */

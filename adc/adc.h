@@ -266,13 +266,21 @@ enum
     LEX_RECEIVING,
     LEX_INSIDE_STRING,
     LEX_INSIDE_CHAR,
+    LEX_ASSIGN,
 };
 
-static void process_file(FILE* out_fd, const char* fname)
+
+#define BUFFERSIZE (10 * 1024)
+
+static void process_file(FILE* out_fd, const char** known_types, int count_types, const char* fname)
 {
     size_t file_size;
     const char* file_contents = slurp_file(fname, &file_size);
     int lex_state = LEX_BEGIN_LINE;
+
+    char* tokenstack[BUFFERSIZE];
+    int tokencount = 0;
+
     if (file_contents)
     {
 
@@ -313,7 +321,6 @@ static void process_file(FILE* out_fd, const char* fname)
             ////////
             // Handle strings
             ////////
-
             else if ( (lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE) && c == '\"' )
             {
                 lex_state = LEX_INSIDE_STRING;
@@ -328,6 +335,52 @@ static void process_file(FILE* out_fd, const char* fname)
             }
             else if ( lex_state == LEX_INSIDE_CHAR && c == '\''  && prev_c != '\\' )
             {
+                lex_state = LEX_RECEIVING;
+            }
+            ///////
+            // Asignment.
+            //////
+            else if ( (lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE) && c == '=' )
+            {
+                lex_state = LEX_ASSIGN;  // Need to differentiate between assignmt and equals operator.
+            }
+            else if ( lex_state == LEX_ASSIGN && c != '=')
+            {
+                if (tokencount > 2)
+                {
+                    char* name = tokenstack[--tokencount];
+                    char** type_decl = 0;
+                    char* token = tokenstack[--tokencount];
+                    int count_decl = 0;
+                    int found_invalid = 0;
+                    while (strcmp(token, ";"))
+                    {
+                        found_invalid = 1;
+                        // Find token in known valid type declaration names
+                        for (int i = 0; i < count_types; ++i)
+                        {
+                            if (!strcmp(known_types[i], token))
+                            {
+                                found_invalid = 0;
+                            }
+
+                        }
+                        // break if not in known type
+                        if (found_invalid) break;
+                        sb_push(type_decl, token);
+                        token = tokenstack[--tokencount];
+                        count_decl++;
+                    }
+                    if (count_decl)
+                    {
+                        printf("Assignment: %s : ", name);
+                        for (int i = 0; i < count_decl; ++i)
+                        {
+                            printf("%s ", type_decl[i]);
+                        }
+                        puts(".");
+                    }
+                }
                 lex_state = LEX_RECEIVING;
             }
             ////////
@@ -350,7 +403,13 @@ static void process_file(FILE* out_fd, const char* fname)
                     sb_push(curtok, '\0');
                     puts(curtok);
                     // Do something with token
+                    tokenstack[tokencount++] = curtok;
                     curtok = 0;  // Reset token
+                    if (c == ';')
+                    {
+                        tokenstack[tokencount++] = ";";
+                        puts(";");
+                    }
                 }
             }
             prev_c = c;
@@ -370,7 +429,24 @@ void adc_type_info(
     assert(output_path);
     assert(directory_path);
 
-    printf("DEBUG==== BEGIN adc_type_info\n");
+
+    // Init known C types
+    char** known_types = 0;
+    int count_types = 0;
+    {
+        char* init_types[] =
+        {
+            "const",
+            "unsigned", "char", "short", "int", "long", "float", "double",
+            "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+            "int8_t", "int16_t", "int32_t", "int64_t",
+        };
+        count_types = (sizeof(init_types) / sizeof(char*));
+        for (int i = 0; i < count_types; ++i)
+        {
+            sb_push(known_types, init_types[i]);
+        }
+    }
 
     FILE* fd = fopen(output_path, "w+");
     if (!fd)
@@ -407,7 +483,34 @@ void adc_type_info(
                 else  // Is a file.
                 {
                     printf("%s\n", fname);
-                    process_file(fd, fname);
+                    char* acceptable_exts[] = {"cc", "cpp", "c", "h", "hh", "hpp"};
+
+                    int accepted = 0;
+                    { // Check that file extension is OK
+                        char* fname_ext = 0;
+                        for(size_t i = fname_len; i > 0; --i)
+                        {
+                            int c = fname[i];
+                            if (c == '.')
+                            {
+                                fname_ext = fname + i + 1;
+                                break;
+                            }
+                        }
+                        for (int i = 0; i < sizeof(acceptable_exts) / sizeof(char*); ++i)
+                        {
+                            if (!strcmp(fname_ext, acceptable_exts[i]))
+                            {
+                                accepted = 1;
+                                break;
+                            }
+                        }
+                    }
+                    // Process all C files.
+                    if (accepted)
+                    {
+                        process_file(fd, known_types, count_types, fname);
+                    }
                 }
             }
             ent = readdir(dir);
@@ -415,11 +518,4 @@ void adc_type_info(
 
         closedir(dir);
     }
-
-
-    // TODO:
-    //  Generate tokens and ids
-    // ident ident assign expr; ===== second ident is a type
-    //
-    printf("DEBUG==== END adc_type_info\n");
 }
