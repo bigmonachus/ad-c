@@ -209,6 +209,10 @@ void adc_expand(
 //      #define ADCTYPE_FILE_my_file_SCOPE_global_NAME_foo int
 
 
+char** known_types = 0;
+char** type_decls = 0;
+
+
 static int is_whitespace(char c)
 {
     if (
@@ -268,7 +272,7 @@ enum
 
 #define BUFFERSIZE (10 * 1024)
 
-static void process_file(FILE* out_fd, char** known_types, const char* fname)
+static void process_file(FILE* out_fd, const char* fname)
 {
     size_t file_size;
     const char* file_contents = slurp_file(fname, &file_size);
@@ -287,6 +291,8 @@ static void process_file(FILE* out_fd, char** known_types, const char* fname)
         char** idents = 0;
         char* curtok = 0;
         char prev_c = 0;
+
+        int newtoken = 0;  // Set to one when last loop emitted an identifier.
 
         for (int i = 0; i < file_size; ++i)
         {
@@ -325,7 +331,6 @@ static void process_file(FILE* out_fd, char** known_types, const char* fname)
             if ((parse_state & PARSE_GOT_ENUM) && c == '}')
             {
                 parse_state ^= PARSE_GOT_ENUM;
-
             }
             ///// check typedef (to append to known types)
             if ((parse_state & PARSE_GOT_TYPEDEF) && !(parse_state & PARSE_IN_STRUCT) && c == ';')
@@ -343,7 +348,7 @@ static void process_file(FILE* out_fd, char** known_types, const char* fname)
                 printf("Got function, named: %s\n", funcname);
                 current_func = funcname;
                 parse_state |= PARSE_IN_FUNC;
-                tokenstack[tokencount++] = ";__func";  // Anchor for doing type chencking
+                tokenstack[tokencount++] = ";";  // Anchor for doing type chencking
             }
             if ((parse_state & PARSE_IN_FUNC) && c == '{')
             {
@@ -359,7 +364,7 @@ static void process_file(FILE* out_fd, char** known_types, const char* fname)
                     parse_state ^= PARSE_IN_FUNC;
                 } else
                 {
-                    tokenstack[tokencount++] = ";__func";  // Anchor for doing type chencking
+                    tokenstack[tokencount++] = ";";  // Anchor for doing type chencking
                 }
             }
             ///////////
@@ -409,93 +414,46 @@ static void process_file(FILE* out_fd, char** known_types, const char* fname)
                 lex_state = LEX_RECEIVING;
             }
             ///////
-            // Asignment.
+            // Assignment.
             //////
             else if ( (lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE) && c == '=' )
             {
                 lex_state = LEX_ASSIGN;  // Need to differentiate between assignmt and equals operator.
             }
-            else if (lex_state == LEX_ASSIGN && c != '=')
+            else if (newtoken && tokencount &&
+                    (
+                     ((lex_state == LEX_ASSIGN && c != '='))
+                     ||
+                     ((parse_state & PARSE_IN_FUNC) && !strcmp(tokenstack[tokencount - 1], ";"))
+                    )
+                    )
             {
-                if (tokencount > 2)
-                {
-                    char* name = tokenstack[--tokencount];
-                    char** type_decl = 0;
-                    char* token = tokenstack[--tokencount];
-                    int count_decl = 0;
-                    int found_invalid = 0;
-                    while (strcmp(token, ";__func"))
-                    {
-                        found_invalid = 1;
-                        // Find token in known valid type declaration names
-                        for (int i = 0; i < sb_count(known_types); ++i)
-                        {
-                            if (!strcmp(known_types[i], token))
-                            {
-                                found_invalid = 0;
-                            }
-                        }
-                        // break if not in known type
-                        if (found_invalid) break;
-                        sb_push(type_decl, token);
-                        token = tokenstack[--tokencount];
-                        count_decl++;
-                    }
-                    if (count_decl)
-                    {
-                        printf("Assignment: %s : ", name);
-                        for (int i = count_decl - 1; i >= 0; --i)
-                        {
-                            printf("%s ", type_decl[i]);
-                        }
-                        puts(".");
-                    }
-                }
-                lex_state = LEX_RECEIVING;
-            }
-            else if ((parse_state & PARSE_IN_FUNC) && !strcmp(tokenstack[tokencount - 1], ";__func"))
-            {
-                int i = tokencount - 2;
-                char* token = tokenstack[i--];
-                char* name = token;
-                int valid = 1;
-                char** type = 0;
-                int tokens_consumed = 1;
+                newtoken = 0;  // reset
+                int i = tokencount;
+                char* token = tokenstack[i - 1];
+                int tokens_consumed = 0;
                 while (i)
                 {
-                    token = tokenstack[i];
+                    token = tokenstack[--i];
+                    int found_anchor = !strcmp(token, ";");
+                    if (!found_anchor)
+                    {
+                        sb_push(type_decls, token);
+                    }
+                    else
+                    {
+                        break;
+                    }
                     ++tokens_consumed;
-                    if (!strcmp(token, ";__func"))
-                    {
-                        break;
-                    }
-                    int found = 0;
-                    for( int j = 0; j < sb_count(known_types); ++j )
-                    {
-                        if (!strcmp(token, known_types[j]))
-                        {
-                            found = 1;
-                            break;
-                        }
-                    }
-                    if (!found)
-                    {
-                        valid = 0;
-                        break;
-                    }
-                    sb_push(type, token);
-                    i--;
                 }
-                if (valid && sb_count(type))
+                if (tokens_consumed)
                 {
-                    tokencount -= tokens_consumed;
-                    printf("Type declaration: %s : ", name);
-                    for (int j = 0; j < sb_count(type); ++j)
-                    {
-                        printf("%s ", type[j]);
-                    }
-                    puts(".");
+                    //tokencount -= tokens_consumed;
+                    sb_push(type_decls, current_func);
+                    sb_push(type_decls, 0);
                 }
+
+                if(lex_state == LEX_ASSIGN) lex_state = LEX_RECEIVING;
             }
             ////////
             // parse token
@@ -510,36 +468,52 @@ static void process_file(FILE* out_fd, char** known_types, const char* fname)
                 else  // Finish token
                 {
                     // Handle empty line.
-                    if (!curtok)
+                    if (curtok)
                     {
-                        continue;
-                    }
-                    sb_push(curtok, '\0');
-                    ////////////////////puts(curtok);
-                    if (parse_state & PARSE_ADD_TYPE)
-                    {
-                        parse_state ^= PARSE_ADD_TYPE;
-                        sb_push(known_types, curtok);
-                        printf("Typeinfo: added type %s\n", curtok);
-                    }
-                    if (parse_state & PARSE_GOT_STRUCT)
-                    {
-                        sb_push(known_types, curtok);
-                        printf("Typeinfo: added struct name %s\n", curtok);
-                    }
+                        static const char* control_flow[] =
+                        {
+                            "do", "while", "for",
+                            "if", "else",
+                        };
+                        // Filter control flow
+                        int is_control = 0;
+                        {
+                            for (int i = 0; i < sizeof(control_flow) / sizeof(char*); ++i)
+                            {
+                                if (!strcmp(curtok, control_flow[i]))
+                                {
+                                    is_control = 1;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!is_control)
+                        {
+                            sb_push(curtok, '\0');
+                            newtoken = 1;
+                            if (parse_state & PARSE_ADD_TYPE)
+                            {
+                                parse_state ^= PARSE_ADD_TYPE;
+                                sb_push(known_types, curtok);
+                                printf("Typeinfo: added type %s\n", curtok);
+                            }
+                            if (parse_state & PARSE_GOT_STRUCT)
+                            {
+                                sb_push(known_types, curtok);
+                                printf("Typeinfo: added struct name %s\n", curtok);
+                            }
 
-                    tokenstack[tokencount++] = curtok;
+                            tokenstack[tokencount++] = curtok;
+                        }
+                    }
                     // push semicolons
                     if (c == ';')
                     {
-                        if (parse_state & PARSE_IN_FUNC)
-                        {
-                            tokenstack[tokencount++] = ";__func";
-                        }
-                        else
-                        {
-                            tokenstack[tokencount++] = ";";
-                        }
+                        tokenstack[tokencount++] = ";";
+                    }
+                    if (c == '*')
+                    {
+                        tokenstack[tokencount++] = "*";
                     }
                     curtok = 0;  // Reset token
                 }
@@ -563,16 +537,16 @@ void adc_type_info(
 
 
     // Init known C types
-    char** known_types = 0;
     {
         // valid identifiers in type declarations
         char* init_types[] =
         {
-            "const",
+            "static", "const",
             "unsigned", "char", "short", "int", "long", "float", "double",
             "uint8_t", "uint16_t", "uint32_t", "uint64_t",
             "int8_t", "int16_t", "int32_t", "int64_t",
             "struct",
+            "*",
         };
         int count_types = (sizeof(init_types) / sizeof(char*));
         for (int i = 0; i < count_types; ++i)
@@ -642,7 +616,7 @@ void adc_type_info(
                     if (accepted)
                     {
                         printf("[...] Processing %s\n", fname);
-                        process_file(fd, known_types, fname);
+                        process_file(fd, fname);
                     }
                 }
             }
@@ -650,5 +624,73 @@ void adc_type_info(
         }
 
         closedir(dir);
+    }
+    // Do output!
+    {
+        int debug_limit = 40;
+        int begin = 0;
+        int end = 0;
+        while (end < sb_count(type_decls))
+        {
+            // Move end to next 0
+            while (type_decls[++end] != 0);
+            char* var_name = type_decls[begin];
+            char* func_name = type_decls[end - 1];
+            int is_valid = 1;
+            char** type = 0;
+            for (int i = begin + 1; i < end - 1; ++i)
+            {
+                char* type = type_decls[i];
+                int is_type = 0;
+                for (int j = 0; j < sb_count(known_types); ++j)
+                {
+                    if (!strcmp(type, known_types[j]))
+                    {
+                        is_type = 1;
+                        break;
+                    }
+                }
+                if (!is_type)
+                {
+                    is_valid = 0;
+                    break;
+                }
+            }
+            // We had to go through the loop
+            if (end - begin < 3)
+            {
+                is_valid = 0;
+            }
+            if (is_valid)
+            {
+                puts("==== Valid type");
+                puts(func_name);
+                for (int i = end - 2; i >= begin + 1; --i)
+                {
+                    char* type = type_decls[i];
+                    int is_qualifier = 0;
+                    // Filter type qualifiers (const static volatile)
+                    static const char* qualifiers[] =
+                    {
+                        "static", "const", "volatile", "auto",
+                    };
+                    {
+                        for (int j = 0; j < sizeof(qualifiers) / sizeof(char*); ++j)
+                        {
+                            if (!strcmp(type, qualifiers[j]))
+                            {
+                                is_qualifier = 1;
+                            }
+                        }
+                    }
+                    if (!is_qualifier)
+                    {
+                        puts(type);
+                    }
+                }
+                puts(var_name);
+            }
+            begin = end + 1;
+        }
     }
 }

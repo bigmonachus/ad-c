@@ -1,4 +1,5 @@
 #include "dummy_include.h"
+#include "zzzz.h"
 
 struct MyStruct
 {
@@ -30,6 +31,9 @@ int main()
 
     ThisIsAlsoACharButItIsVeryUnpracticallyNamed c = 'x';
 
+
+    ZType this_is_also_a_decl;
+
     a.something = 0;
     bar.x = 2;
 
@@ -48,7 +52,6 @@ int main()
     }
 
     int testing;
-    int int;
 
     const int not_useful = 0;
     do {
@@ -61,6 +64,9 @@ int main()
 
     static const struct Named i_can_parse_this = { 0 };
     static const struct IgnoreMe i_can_parse_this_too = { 0 };
+
+    char* pointer = 0;
+    const char*another_pointer = 0;
 
 
     printf("Hi there!");
