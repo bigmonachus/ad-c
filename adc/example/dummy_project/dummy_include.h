@@ -1,6 +1,8 @@
 #define SOMETHING NOTHING
 
-// Yup
+// Yup, this is a comment ////
+
+struct IgnoreMe;
 
 typedef struct
 {
@@ -11,3 +13,5 @@ typedef struct Named
 {
     int member;
 } AlsoValid;
+
+typedef char ThisIsAlsoACharButItIsVeryUnpracticallyNamed;

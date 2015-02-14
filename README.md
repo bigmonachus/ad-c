@@ -9,9 +9,9 @@ _Warning_ `#include <adc.h>` in Windows, without properly specifying the Include
 
 Features
 --------
-Simple template (text substitution) engine.
+- Simple template (text substitution) engine.
+- C99 type parser. It can be extended for some light C++.
 
 To-Do
 -----
-- C99 type parser
-- Reflection engine.
+- Reflection engine, using the parser

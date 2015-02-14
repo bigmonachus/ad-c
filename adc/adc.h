@@ -243,21 +243,6 @@ static int is_ident_char(char c)
     return 0;
 }
 
-/* static int is_operator(char c) */
-/* { */
-/*     return ( */
-/*             c == '*' | */
-/*             c == '/' | */
-/*             c == '+' | */
-/*             c == '-' | */
-/*             c == '%' | */
-/*             c == '=' | */
-/*             c == '^' | */
-/*             c == '|' | */
-/*             c == '&' */
-/*            ); */
-/* } */
-
 enum
 {
     LEX_BEGIN_LINE,
@@ -269,21 +254,36 @@ enum
     LEX_ASSIGN,
 };
 
+enum
+{
+    PARSE_TOP         = (1 << 0),
+    PARSE_GOT_STRUCT  = (1 << 1),
+    PARSE_IN_STRUCT   = (1 << 2),
+    PARSE_GOT_TYPEDEF = (1 << 3),
+    PARSE_ADD_TYPE    = (1 << 4),
+    PARSE_GOT_ENUM    = (1 << 5),
+    PARSE_IN_FUNC     = (1 << 6),
+};
+
 
 #define BUFFERSIZE (10 * 1024)
 
-static void process_file(FILE* out_fd, const char** known_types, int count_types, const char* fname)
+static void process_file(FILE* out_fd, char** known_types, const char* fname)
 {
     size_t file_size;
     const char* file_contents = slurp_file(fname, &file_size);
     int lex_state = LEX_BEGIN_LINE;
+    int parse_state = PARSE_TOP;
 
     char* tokenstack[BUFFERSIZE];
     int tokencount = 0;
 
+    char* current_func = 0;  // Used for code-gen
+
     if (file_contents)
     {
 
+        int brace_count = 0; // To determine if leaving function scope.
         char** idents = 0;
         char* curtok = 0;
         char prev_c = 0;
@@ -291,6 +291,74 @@ static void process_file(FILE* out_fd, const char** known_types, int count_types
         for (int i = 0; i < file_size; ++i)
         {
             char c = file_contents[i];
+
+            if (tokencount && !(parse_state & PARSE_GOT_STRUCT) &&
+                    !(parse_state & PARSE_IN_STRUCT) &&
+                    !(parse_state & PARSE_IN_FUNC) &&
+                    !strcmp(tokenstack[tokencount - 1], "struct"))
+            {
+                parse_state |= PARSE_GOT_STRUCT;
+            }
+            else if (tokencount && !(parse_state & PARSE_GOT_TYPEDEF) && !strcmp(tokenstack[tokencount - 1], "typedef"))
+            {
+                parse_state |= PARSE_GOT_TYPEDEF;
+            }
+            else if (tokencount && !(parse_state & PARSE_GOT_ENUM) && !strcmp(tokenstack[tokencount - 1], "enum"))
+            {
+                parse_state |= PARSE_GOT_ENUM;
+            }
+            ///// Check struct
+            if ((parse_state & PARSE_GOT_STRUCT) && prev_c == ';')
+            {
+                parse_state ^= PARSE_GOT_STRUCT;
+            }
+            if ((parse_state & PARSE_GOT_STRUCT) && c == '{')
+            {
+                parse_state ^= PARSE_GOT_STRUCT;
+                parse_state |= PARSE_IN_STRUCT;
+            }
+            if ((parse_state & PARSE_IN_STRUCT) && c == '}')
+            {
+                parse_state ^= PARSE_IN_STRUCT;
+            }
+            ///// check enum
+            if ((parse_state & PARSE_GOT_ENUM) && c == '}')
+            {
+                parse_state ^= PARSE_GOT_ENUM;
+
+            }
+            ///// check typedef (to append to known types)
+            if ((parse_state & PARSE_GOT_TYPEDEF) && !(parse_state & PARSE_IN_STRUCT) && c == ';')
+            {
+                // Please, when the token is finalized, append to known types
+                parse_state |= PARSE_ADD_TYPE;
+                parse_state ^= PARSE_GOT_TYPEDEF;
+            }
+            ///////////
+            //// check for function.
+            ///////////
+            if ((parse_state == PARSE_TOP) && c == '{')
+            {
+                char* funcname = tokenstack[tokencount - 1];
+                printf("Got function, named: %s\n", funcname);
+                current_func = funcname;
+                parse_state |= PARSE_IN_FUNC;
+                tokenstack[tokencount++] = ";__func";  // Anchor for doing type chencking
+            }
+            if ((parse_state & PARSE_IN_FUNC) && c == '{')
+            {
+                brace_count += 1;
+            }
+            if ((parse_state & PARSE_IN_FUNC) && c == '}')
+            {
+                brace_count -= 1;
+                if (brace_count == 0)
+                {
+                    printf("Leaving function %s.\n", current_func);
+                    current_func = 0;
+                    parse_state ^= PARSE_IN_FUNC;
+                }
+            }
             ///////////
             // HANDLE STUFF THAT SHOULD BE IGNORED
             // ////////
@@ -344,7 +412,7 @@ static void process_file(FILE* out_fd, const char** known_types, int count_types
             {
                 lex_state = LEX_ASSIGN;  // Need to differentiate between assignmt and equals operator.
             }
-            else if ( lex_state == LEX_ASSIGN && c != '=')
+            else if (lex_state == LEX_ASSIGN && c != '=')
             {
                 if (tokencount > 2)
                 {
@@ -353,17 +421,16 @@ static void process_file(FILE* out_fd, const char** known_types, int count_types
                     char* token = tokenstack[--tokencount];
                     int count_decl = 0;
                     int found_invalid = 0;
-                    while (strcmp(token, ";"))
+                    while (strcmp(token, ";__func"))
                     {
                         found_invalid = 1;
                         // Find token in known valid type declaration names
-                        for (int i = 0; i < count_types; ++i)
+                        for (int i = 0; i < sb_count(known_types); ++i)
                         {
                             if (!strcmp(known_types[i], token))
                             {
                                 found_invalid = 0;
                             }
-
                         }
                         // break if not in known type
                         if (found_invalid) break;
@@ -374,7 +441,7 @@ static void process_file(FILE* out_fd, const char** known_types, int count_types
                     if (count_decl)
                     {
                         printf("Assignment: %s : ", name);
-                        for (int i = 0; i < count_decl; ++i)
+                        for (int i = count_decl - 1; i >= 0; --i)
                         {
                             printf("%s ", type_decl[i]);
                         }
@@ -383,10 +450,54 @@ static void process_file(FILE* out_fd, const char** known_types, int count_types
                 }
                 lex_state = LEX_RECEIVING;
             }
+            else if ((parse_state & PARSE_IN_FUNC) && !strcmp(tokenstack[tokencount - 1], ";__func"))
+            {
+                int i = tokencount - 2;
+                char* token = tokenstack[i--];
+                char* name = token;
+                int valid = 1;
+                char** type = 0;
+                int tokens_consumed = 1;
+                while (i)
+                {
+                    token = tokenstack[i];
+                    ++tokens_consumed;
+                    if (!strcmp(token, ";__func"))
+                    {
+                        break;
+                    }
+                    int found = 0;
+                    for( int j = 0; j < sb_count(known_types); ++j )
+                    {
+                        if (!strcmp(token, known_types[j]))
+                        {
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (!found)
+                    {
+                        valid = 0;
+                        break;
+                    }
+                    sb_push(type, token);
+                    i--;
+                }
+                if (valid && sb_count(type))
+                {
+                    tokencount -= tokens_consumed;
+                    printf("Type declaration: %s : ", name);
+                    for (int j = 0; j < sb_count(type); ++j)
+                    {
+                        printf("%s ", type[j]);
+                    }
+                    puts(".");
+                }
+            }
             ////////
             // parse token
             ///////
-            else if ( lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE )
+            if ( lex_state == LEX_RECEIVING || lex_state == LEX_BEGIN_LINE )
             {
                 lex_state = LEX_RECEIVING;
                 if (is_ident_char(c))
@@ -401,15 +512,33 @@ static void process_file(FILE* out_fd, const char** known_types, int count_types
                         continue;
                     }
                     sb_push(curtok, '\0');
-                    puts(curtok);
-                    // Do something with token
+                    ////////////////////puts(curtok);
+                    if (parse_state & PARSE_ADD_TYPE)
+                    {
+                        parse_state ^= PARSE_ADD_TYPE;
+                        sb_push(known_types, curtok);
+                        printf("Typeinfo: added type %s\n", curtok);
+                    }
+                    if (parse_state & PARSE_GOT_STRUCT)
+                    {
+                        sb_push(known_types, curtok);
+                        printf("Typeinfo: added struct name %s\n", curtok);
+                    }
+
                     tokenstack[tokencount++] = curtok;
-                    curtok = 0;  // Reset token
+                    // push semicolons
                     if (c == ';')
                     {
-                        tokenstack[tokencount++] = ";";
-                        puts(";");
+                        if (parse_state & PARSE_IN_FUNC)
+                        {
+                            tokenstack[tokencount++] = ";__func";
+                        }
+                        else
+                        {
+                            tokenstack[tokencount++] = ";";
+                        }
                     }
+                    curtok = 0;  // Reset token
                 }
             }
             prev_c = c;
@@ -432,16 +561,17 @@ void adc_type_info(
 
     // Init known C types
     char** known_types = 0;
-    int count_types = 0;
     {
+        // valid identifiers in type declarations
         char* init_types[] =
         {
             "const",
             "unsigned", "char", "short", "int", "long", "float", "double",
             "uint8_t", "uint16_t", "uint32_t", "uint64_t",
             "int8_t", "int16_t", "int32_t", "int64_t",
+            "struct",
         };
-        count_types = (sizeof(init_types) / sizeof(char*));
+        int count_types = (sizeof(init_types) / sizeof(char*));
         for (int i = 0; i < count_types; ++i)
         {
             sb_push(known_types, init_types[i]);
@@ -482,8 +612,7 @@ void adc_type_info(
                 }
                 else  // Is a file.
                 {
-                    printf("%s\n", fname);
-                    char* acceptable_exts[] = {"cc", "cpp", "c", "h", "hh", "hpp"};
+                    static char* acceptable_exts[] = {"cc", "cpp", "c", "h", "hh", "hpp"};
 
                     int accepted = 0;
                     { // Check that file extension is OK
@@ -509,7 +638,8 @@ void adc_type_info(
                     // Process all C files.
                     if (accepted)
                     {
-                        process_file(fd, known_types, count_types, fname);
+                        printf("[...] Processing %s\n", fname);
+                        process_file(fd, known_types, fname);
                     }
                 }
             }
