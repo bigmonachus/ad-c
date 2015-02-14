@@ -47,6 +47,9 @@ int main()
 
     }
 
+    int testing;
+    int int;
+
     const int not_useful = 0;
     do {
         // Nothing!

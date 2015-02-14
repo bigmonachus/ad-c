@@ -357,6 +357,9 @@ static void process_file(FILE* out_fd, char** known_types, const char* fname)
                     printf("Leaving function %s.\n", current_func);
                     current_func = 0;
                     parse_state ^= PARSE_IN_FUNC;
+                } else
+                {
+                    tokenstack[tokencount++] = ";__func";  // Anchor for doing type chencking
                 }
             }
             ///////////
