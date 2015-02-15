@@ -22,6 +22,6 @@ int main()
             "type", "int32_t");
 
     adc_type_info(
-            "types.h",
+            "./dummy_project/types.h",
             "./dummy_project");
 }

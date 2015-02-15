@@ -1,6 +1,9 @@
 #include "dummy_include.h"
 #include "zzzz.h"
 
+#include "types.h"
+#include "../../adc.h"
+
 struct MyStruct
 {
     int x;
@@ -21,6 +24,12 @@ enum
     zero,
     one,
 };
+
+float my_test_func()
+{
+    int x = 1;
+    return 0.0f;
+}
 
 int main()
 {
@@ -48,7 +57,7 @@ int main()
 
     while (0)
     {
-
+        float inside_while = 1;
     }
 
     int testing;
@@ -68,6 +77,6 @@ int main()
     char* pointer = 0;
     const char*another_pointer = 0;
 
-
-    printf("Hi there!");
+    adc_local_type(main, this_is_also_a_decl) metapointer = 0;
+    printf("Hi there! %s %d\n", adc_string_type(inside_do), metapointer);
 }

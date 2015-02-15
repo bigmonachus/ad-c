@@ -19,6 +19,16 @@
 // ad-C
 // ============================================================
 
+#define ADC__STR(a) #a
+#define ADC__FUNCPOST(post) __FUNCTION__#post
+#define ADC__PREPOST(pre,post) pre##ADC__FUNCPOST(post)
+#define adc_string_type(name) ADC__PREPOST(ADC__STR(ADC_TYPE__FUNC__),__NAME__##name)
+#define adc_local_type(func, name) ADC_TYPE__FUNC__ ## func ## __NAME__ ## name
+
+/* #define EXPAND(x) #x */
+/* #define EXPANDED(x) EXPAND(X) */
+/* #define INTERNAL_TYPE(f, var) ADC_TYPE__FUNC__#f#__NAME__##var */
+
 void adc_clear_file(const char* fname);
 
 // NOTE: this function dumbly replaces text. It doesn't care about grammar.
@@ -272,7 +282,7 @@ enum
 
 #define BUFFERSIZE (10 * 1024)
 
-static void process_file(FILE* out_fd, const char* fname)
+static void process_file(const char* fname)
 {
     size_t file_size;
     const char* file_contents = slurp_file(fname, &file_size);
@@ -420,7 +430,7 @@ static void process_file(FILE* out_fd, const char* fname)
             {
                 lex_state = LEX_ASSIGN;  // Need to differentiate between assignmt and equals operator.
             }
-            else if (newtoken && tokencount &&
+            else if (tokencount &&
                     (
                      ((lex_state == LEX_ASSIGN && c != '='))
                      ||
@@ -616,7 +626,7 @@ void adc_type_info(
                     if (accepted)
                     {
                         printf("[...] Processing %s\n", fname);
-                        process_file(fd, fname);
+                        process_file(fname);
                     }
                 }
             }
@@ -665,6 +675,10 @@ void adc_type_info(
             {
                 puts("==== Valid type");
                 puts(func_name);
+                char* identifier[1024] = { 0 };
+                char* type_str[1024] = { 0 };
+                sprintf((char*)identifier, "ADC_TYPE__FUNC__%s__NAME__%s",
+                                func_name, var_name);
                 for (int i = end - 2; i >= begin + 1; --i)
                 {
                     char* type = type_decls[i];
@@ -685,10 +699,16 @@ void adc_type_info(
                     }
                     if (!is_qualifier)
                     {
+                        sprintf((char*)type_str, "%s %s ", type_str, type);
                         puts(type);
                     }
                 }
                 puts(var_name);
+                char* header_line[1024];
+                sprintf((char*)header_line, "#ifndef %s\n#define %s %s\n#endif\n",
+                        identifier, identifier, type_str);
+                fwrite((const char*)header_line, sizeof(char), strlen((char*)header_line), fd);
+
             }
             begin = end + 1;
         }
