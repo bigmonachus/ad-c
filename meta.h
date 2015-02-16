@@ -1,3 +1,12 @@
+/**
+ * meta.h
+ *  Sergio Gonzalez
+ *
+ * [WIP]
+ * Tools for doing meta-programming
+ *
+ */
+
 #pragma once
 
 #include <assert.h>
@@ -13,7 +22,8 @@
 #include "win_dirent.h"
 #endif
 
-#include "stb_sb.h"
+#include "serg_io.h"
+#include "memory.h"
 
 // ============================================================
 // ad-C
@@ -29,51 +39,24 @@
 /* #define EXPANDED(x) EXPAND(X) */
 /* #define INTERNAL_TYPE(f, var) ADC_TYPE__FUNC__#f#__NAME__##var */
 
-void adc_clear_file(const char* fname);
+void meta_clear_file(const char* fname);
 
 // NOTE: this function dumbly replaces text. It doesn't care about grammar.
 // e.g. it will replace tokens inside of strings.
-void adc_expand(
+void meta_expand(
         const char* output_path,
         const char* tmpl_path,
         ...);
 
 // Searches for *.c *.h *.cpp and *.cc files in directory_path, parses them,
 // and generates type info at output_path
-void adc_type_info(
+void meta_type_info(
         const char* output_path,
         const char* directory_path);
 
 // ============================================================
 
-static const size_t bytes_in_fd(FILE* fd)
-{
-    fpos_t fd_pos;
-    fgetpos(fd, &fd_pos);
-    fseek(fd, 0, SEEK_END);
-    size_t len = (size_t)ftell(fd);
-    fsetpos(fd, &fd_pos);
-    return len;
-}
-
-static const char* slurp_file(const char* path, size_t *out_size)
-{
-    FILE* fd = fopen(path, "r");
-    assert(fd);
-    if (!fd)
-    {
-        fprintf(stderr, "ERROR: couldn't slurp %s\n", path);
-        return NULL;
-    }
-    const size_t len = bytes_in_fd(fd);
-    const char* contents = malloc(len);
-    fread((void*)contents, len, 1, fd);
-    fclose(fd);
-    *out_size = len;
-    return contents;
-}
-
-void adc_clear_file(const char* path)
+void meta_clear_file(const char* path)
 {
     FILE* fd = fopen(path, "w+");
     assert(fd);
@@ -94,12 +77,16 @@ typedef struct
     TemplateToken substitution;
 } Binding;
 
-void adc_expand(
+void meta_expand(
         const char* result_path,
         const char* tmpl_path,
         const int num_bindings,
         ...)
 {
+    size_t size = 300 * 1024 * 1024;
+    void* big_block_of_memory = malloc(size);
+    Arena root_arena = arena_init(big_block_of_memory, size);
+
     enum
     {
         LEX_NOTHING,
@@ -110,7 +97,8 @@ void adc_expand(
 
     // Get bindings
 
-    Binding* bindings = NULL;
+    // TODO: do a flexible stretchy array.
+    Binding* bindings = arena_array(&root_arena, Binding, 1000);
 
     va_list ap;
 
@@ -124,7 +112,7 @@ void adc_expand(
         TemplateToken tk_subst = { subst, strlen(subst) };
 
         Binding binding = { tk_name, tk_subst };
-        sb_push(bindings, binding);
+        array_push(bindings, binding);
     }
     va_end(ap);
 
@@ -132,23 +120,23 @@ void adc_expand(
     assert(out_fd);
     size_t data_size = 0;
     const char* in_data = slurp_file(tmpl_path, &data_size);
-    char* out_data = NULL;
+    char* out_data = arena_array(&root_arena, char, 10 * 1024 * 1024);
 
     size_t path_len = strlen(tmpl_path);
-    sb_push(out_data, '/'); sb_push(out_data, '/');
+    array_push(out_data, '/'); array_push(out_data, '/');
     for (int i = 0; i < path_len; ++i)
     {
-        sb_push(out_data, tmpl_path[i]);
+        array_push(out_data, tmpl_path[i]);
     }
-    sb_push(out_data, '\n');
-    sb_push(out_data, '\n');
+    array_push(out_data, '\n');
+    array_push(out_data, '\n');
 
-    TemplateToken* tokens = NULL;
+    TemplateToken* tokens = arena_array(&root_arena, TemplateToken, 5000);
 
     int lexer_state = LEX_NOTHING;
 
     char prev = 0;
-    char* name = NULL;
+    char* name = arena_array(&root_arena, char, 1000);
     int name_len = 0;
     for (int i = 0; i < data_size; ++i)
     {
@@ -157,7 +145,7 @@ void adc_expand(
         {
             if ( lexer_state == LEX_NOTHING && c != '$' )
             {
-                sb_push(out_data, c);
+                array_push(out_data, c);
             }
             if ( lexer_state == LEX_NOTHING && c == '$' )
             {
@@ -170,23 +158,25 @@ void adc_expand(
             else if (lexer_state == LEX_INSIDE && c != '>')
             {
                 // add char to name
-                sb_push(name, c);
+                array_push(name, c);
                 ++name_len;
             }
             else if (lexer_state == LEX_INSIDE && c == '>')
             {
                 // add token
-                sb_push(name, '\0');
+                array_push(name, '\0');
                 TemplateToken token;
-                token.str = name;
+                char* new_name = arena_array(&root_arena, char, strlen(name)+1);
+                strcpy(new_name, name);
+                token.str = new_name;
                 token.len = name_len;
-                name = NULL;
-                sb_push(tokens, token);
+                array_reset(name);
+                array_push(tokens, token);
                 name_len = 0;
                 lexer_state = LEX_NOTHING;
 
                 // Do stupid search on args to get matching subst.
-                for (int i = 0; i < sb_count(bindings); ++i)
+                for (int i = 0; i < array_count(bindings); ++i)
                 {
                     const Binding binding = bindings[i];
                     if (!strcmp(binding.name.str, token.str))
@@ -194,7 +184,7 @@ void adc_expand(
                         for (int j = 0; j < binding.substitution.len; ++j)
                         {
                             char c = binding.substitution.str[j];
-                            sb_push(out_data, c);
+                            array_push(out_data, c);
                         }
                         break;
                     }
@@ -204,10 +194,12 @@ void adc_expand(
         prev = c;
     }
 
-    sb_push(out_data, '\n');
+    array_push(out_data, '\n');
+    array_push(out_data, '\n');
 
-    fwrite(out_data, sizeof(char), sb_count(out_data), out_fd);
+    fwrite(out_data, sizeof(char), array_count(out_data) - 1, out_fd);
     fclose(out_fd);
+    free(big_block_of_memory);
 }
 
 // Note:
@@ -226,10 +218,10 @@ char** type_decls = 0;
 static int is_whitespace(char c)
 {
     if (
-            c == ' '  |
-            c == '\v' |
-            c == '\t' |
-            c == '\r'
+            (c == ' ' ) |
+            (c == '\v') |
+            (c == '\t') |
+            (c == '\r')
        )
     {
         return 1;
@@ -284,6 +276,10 @@ enum
 
 static void process_file(const char* fname)
 {
+    size_t size = 300 * 1024 * 1024;
+    void* big_block_of_memory = malloc(size);
+    Arena root_arena = arena_init(big_block_of_memory, size);
+
     size_t file_size;
     const char* file_contents = slurp_file(fname, &file_size);
     int lex_state = LEX_BEGIN_LINE;
@@ -299,7 +295,7 @@ static void process_file(const char* fname)
 
         int brace_count = 0; // To determine if leaving function scope.
         char** idents = 0;
-        char* curtok = 0;
+        char* curtok = arena_array(&root_arena, char, 2000);
         char prev_c = 0;
 
         int newtoken = 0;  // Set to one when last loop emitted an identifier.
@@ -448,7 +444,7 @@ static void process_file(const char* fname)
                     int found_anchor = !strcmp(token, ";");
                     if (!found_anchor)
                     {
-                        sb_push(type_decls, token);
+                        array_push(type_decls, token);
                     }
                     else
                     {
@@ -459,8 +455,8 @@ static void process_file(const char* fname)
                 if (tokens_consumed)
                 {
                     //tokencount -= tokens_consumed;
-                    sb_push(type_decls, current_func);
-                    sb_push(type_decls, 0);
+                    array_push(type_decls, current_func);
+                    array_push(type_decls, 0);
                 }
 
                 if(lex_state == LEX_ASSIGN) lex_state = LEX_RECEIVING;
@@ -473,12 +469,12 @@ static void process_file(const char* fname)
                 lex_state = LEX_RECEIVING;
                 if (is_ident_char(c))
                 {
-                    sb_push(curtok, c);
+                    array_push(curtok, c);
                 }
                 else  // Finish token
                 {
                     // Handle empty line.
-                    if (curtok)
+                    if (array_count(curtok))
                     {
                         static const char* control_flow[] =
                         {
@@ -499,21 +495,23 @@ static void process_file(const char* fname)
                         }
                         if (!is_control)
                         {
-                            sb_push(curtok, '\0');
+                            array_push(curtok, '\0');
                             newtoken = 1;
+                            char* token = arena_array(&root_arena, char, array_count(curtok));
+                            strcpy(token, curtok);
                             if (parse_state & PARSE_ADD_TYPE)
                             {
                                 parse_state ^= PARSE_ADD_TYPE;
-                                sb_push(known_types, curtok);
-                                printf("Typeinfo: added type %s\n", curtok);
+                                array_push(known_types, token);
+                                printf("Typeinfo: added type %s\n", token);
                             }
                             if (parse_state & PARSE_GOT_STRUCT)
                             {
-                                sb_push(known_types, curtok);
-                                printf("Typeinfo: added struct name %s\n", curtok);
+                                array_push(known_types, token);
+                                printf("Typeinfo: added struct name %s\n", token);
                             }
 
-                            tokenstack[tokencount++] = curtok;
+                            tokenstack[tokencount++] = token;
                         }
                     }
                     // push semicolons
@@ -525,7 +523,8 @@ static void process_file(const char* fname)
                     {
                         tokenstack[tokencount++] = "*";
                     }
-                    curtok = 0;  // Reset token
+                    // Reset token
+                    array_reset(curtok);
                 }
             }
             prev_c = c;
@@ -538,14 +537,19 @@ static void process_file(const char* fname)
 
 }
 
-void adc_type_info(
+void meta_type_info(
         const char* output_path,
         const char* directory_path)
 {
     assert(output_path);
     assert(directory_path);
 
+    size_t size = 300 * 1024 * 1024;
+    void* big_block_of_memory = malloc(size);
+    Arena root_arena = arena_init(big_block_of_memory, size);
 
+    known_types = arena_array(&root_arena, char*, 3000);
+    type_decls  = arena_array(&root_arena, char*, 3000);
     // Init known C types
     {
         // valid identifiers in type declarations
@@ -561,7 +565,7 @@ void adc_type_info(
         int count_types = (sizeof(init_types) / sizeof(char*));
         for (int i = 0; i < count_types; ++i)
         {
-            sb_push(known_types, init_types[i]);
+            array_push(known_types, init_types[i]);
         }
     }
 
@@ -640,7 +644,7 @@ void adc_type_info(
         int debug_limit = 40;
         int begin = 0;
         int end = 0;
-        while (end < sb_count(type_decls))
+        while (end < array_count(type_decls))
         {
             // Move end to next 0
             while (type_decls[++end] != 0);
@@ -652,7 +656,7 @@ void adc_type_info(
             {
                 char* type = type_decls[i];
                 int is_type = 0;
-                for (int j = 0; j < sb_count(known_types); ++j)
+                for (int j = 0; j < array_count(known_types); ++j)
                 {
                     if (!strcmp(type, known_types[j]))
                     {

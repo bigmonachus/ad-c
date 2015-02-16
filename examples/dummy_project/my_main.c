@@ -76,7 +76,4 @@ int main()
 
     char* pointer = 0;
     const char*another_pointer = 0;
-
-    adc_local_type(main, this_is_also_a_decl) metapointer = 0;
-    printf("Hi there! %s %d\n", adc_string_type(inside_do), metapointer);
 }
