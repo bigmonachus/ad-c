@@ -32,9 +32,9 @@ typedef struct Arena_s
 // =========================================
 
 // Create a root arena from a memory block.
-Arena arena_init(void* base, size_t size);
+static Arena arena_init(void* base, size_t size);
 // Create a child arena.
-Arena arena_spawn(Arena* parent, size_t size);
+static Arena arena_spawn(Arena* parent, size_t size);
 
 // =========================================
 // ====          Allocation             ====
