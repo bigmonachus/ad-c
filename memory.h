@@ -7,8 +7,7 @@
  *
  */
 
-#ifndef MEMORY_H_DEFINED
-#define MEMORY_H_DEFINED
+#pragma once
 
 #ifdef __cplusplus
 extern "C"
@@ -40,14 +39,14 @@ Arena arena_spawn(Arena* parent, size_t size);
 // =========================================
 // ====          Allocation             ====
 // =========================================
-#define arena_alloc_elem(arena, T)           (T *)arena_alloc_bytes(arena, sizeof(T))
-#define arena_alloc_array(arena, count, T)   (T *)arena_alloc_bytes(arena, (count) * sizeof(T))
-void*   arena_alloc_bytes (Arena* arena, size_t num_bytes);
+#define      arena_alloc_elem(arena, T)         (T *)arena_alloc_bytes(arena, sizeof(T))
+#define      arena_alloc_array(arena, count, T) (T *)arena_alloc_bytes(arena, (count) * sizeof(T))
+static void* arena_alloc_bytes (Arena* arena, size_t num_bytes);
 
 // =========================================
 // ====            Reuse                ====
 // =========================================
-void arena_reset(Arena* arena);
+static void arena_reset(Arena* arena);
 
 // =========================================
 // ====       Use as array              ====
@@ -63,6 +62,15 @@ void arena_reset(Arena* arena);
 // exactly like std::vector.
 // You can forget about it when you clear its parent.
 
+#define arena_array(a, type, size) (type *)arena__array_typeless(a, sizeof(type) * size)
+#define array_push(a, e) (arena__array_try_grow(a), a[arena__array_header(a)->count - 1] = e)
+#define array_reset(a) (arena__array_header(a)->count = 0)
+#define array_count(a) (arena__array_header(a)->count)
+
+// =========================================
+//        Implementation
+// =========================================
+
 #pragma pack(push, 1)
 typedef struct
 {
@@ -71,8 +79,10 @@ typedef struct
 } ArrayHeader;
 #pragma pack(pop)
 
-#define arena_array(arena, type, size) (type *)arena__array_typeless(arena, sizeof(type) * size)
-void* arena__array_typeless(Arena* arena, size_t size)
+#define arena__array_header(array) \
+    ((ArrayHeader*)((uint8_t*)array - sizeof(ArrayHeader)))
+
+static void* arena__array_typeless(Arena* arena, size_t size)
 {
     Arena child = arena_spawn(arena, size + sizeof(ArrayHeader));
     ArrayHeader head = { 0 };
@@ -83,38 +93,26 @@ void* arena__array_typeless(Arena* arena, size_t size)
     return (void*)(((uint8_t*)child.ptr) + sizeof(ArrayHeader));
 }
 
-#define array_push(array, elem) \
-    (arena__array_try_grow(array), array[arena__array_header(array)->count - 1] = elem)
-
-#define array_reset(array) \
-    (arena__array_header(array)->count = 0)
-
-#define array_count(array) \
-    (arena__array_header(array)->count)
-
-// =========================================
-//        Implementation
-// =========================================
-#define arena__array_header(array) \
-    ((ArrayHeader*)((uint8_t*)array - sizeof(ArrayHeader)))
-
-void arena__array_try_grow(void* array)
+static void arena__array_try_grow(void* array)
 {
     ArrayHeader* head = arena__array_header(array);
     assert(head->size >= (head->count + 1));
     ++head->count;
 }
 
-void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
+static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
 {
     size_t total = arena->count + num_bytes;
-    assert(total <= arena->size);
+    if (total > arena->size)
+    {
+        assert(!"Arena full.");
+    }
     void* result = arena->ptr + arena->count;
     arena->count += num_bytes;
     return result;
 }
 
-Arena arena_init(void* base, size_t size)
+static Arena arena_init(void* base, size_t size)
 {
     Arena arena = { 0 };
     arena.ptr = (int8_t*)base;
@@ -125,7 +123,7 @@ Arena arena_init(void* base, size_t size)
     return arena;
 }
 
-Arena arena_spawn(Arena* parent, size_t size)
+static Arena arena_spawn(Arena* parent, size_t size)
 {
     void* ptr = arena_alloc_bytes(parent, size);
     assert(ptr);
@@ -139,7 +137,7 @@ Arena arena_spawn(Arena* parent, size_t size)
     return child;
 }
 
-void arena_reset(Arena* arena)
+static void arena_reset(Arena* arena)
 {
     arena->count = 0;
 }
@@ -147,5 +145,3 @@ void arena_reset(Arena* arena)
 #ifdef __cplusplus
 }
 #endif
-
-#endif  // MEMORY_H_DEFINED
