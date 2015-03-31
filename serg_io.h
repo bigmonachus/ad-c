@@ -30,12 +30,15 @@ static const char* slurp_file(const char* path, int *out_size)
     }
     int len = bytes_in_fd(fd);
     char* contents = malloc(len + 1);
-    // TODO: Truncating from size_t to int... Technically a bug but will probably never happen
-    const int read = (int)fread((void*)contents, 1, (size_t)len, fd);
-    // TODO: Do something about read != len?
-    fclose(fd);
-    *out_size = read + 1;
-    contents[read] = '\0';
+    if (contents)
+    {
+        // TODO: Truncating from size_t to int... Technically a bug but will probably never happen
+        const int read = (int)fread((void*)contents, 1, (size_t)len, fd);
+        // TODO: Do something about read != len?
+        fclose(fd);
+        *out_size = read + 1;
+        contents[read] = '\0';
+    }
     return contents;
 }
 
