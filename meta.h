@@ -60,7 +60,7 @@ void meta_clear_file(const char* path)
 {
     FILE* fd = fopen(path, "w+");
     assert(fd);
-    static const char message[] = "//File generated from template by ad-C.\n\n";
+    static const char message[] = "//File generated from template by libserg/meta.h.\n\n";
     fwrite(message, sizeof(char), sizeof(message) - 1, fd);
     fclose(fd);
 }
@@ -118,7 +118,7 @@ void meta_expand(
 
     FILE* out_fd = fopen(result_path, "a");
     assert(out_fd);
-    size_t data_size = 0;
+    int data_size = 0;
     const char* in_data = slurp_file(tmpl_path, &data_size);
     char* out_data = arena_array(&root_arena, char, 10 * 1024 * 1024);
 
@@ -280,7 +280,7 @@ static void process_file(const char* fname)
     void* big_block_of_memory = malloc(size);
     Arena root_arena = arena_init(big_block_of_memory, size);
 
-    size_t file_size;
+    int file_size;
     const char* file_contents = slurp_file(fname, &file_size);
     int lex_state = LEX_BEGIN_LINE;
     int parse_state = PARSE_TOP;
