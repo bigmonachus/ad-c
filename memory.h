@@ -22,8 +22,8 @@ extern "C"
 
 typedef struct Arena_s
 {
-    size_t size;
-    size_t count;
+    int64_t size;
+    int64_t count;
     int8_t* ptr;
 } Arena;
 
@@ -32,9 +32,9 @@ typedef struct Arena_s
 // =========================================
 
 // Create a root arena from a memory block.
-static Arena arena_init(void* base, size_t size);
+static Arena arena_init(void* base, int64_t size);
 // Create a child arena.
-static Arena arena_spawn(Arena* parent, size_t size);
+static Arena arena_spawn(Arena* parent, int64_t size);
 
 // =========================================
 // ====          Allocation             ====
@@ -74,8 +74,8 @@ static void arena_reset(Arena* arena);
 #pragma pack(push, 1)
 typedef struct
 {
-    size_t size;
-    size_t count;
+    int64_t size;
+    int64_t count;
 } ArrayHeader;
 #pragma pack(pop)
 
@@ -102,7 +102,7 @@ static void arena__array_try_grow(void* array)
 
 static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
 {
-    size_t total = arena->count + num_bytes;
+    int64_t total = arena->count + num_bytes;
     if (total > arena->size)
     {
         assert(!"Arena full.");
@@ -112,7 +112,7 @@ static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
     return result;
 }
 
-static Arena arena_init(void* base, size_t size)
+static Arena arena_init(void* base, int64_t size)
 {
     Arena arena = { 0 };
     arena.ptr = (int8_t*)base;
@@ -123,7 +123,7 @@ static Arena arena_init(void* base, size_t size)
     return arena;
 }
 
-static Arena arena_spawn(Arena* parent, size_t size)
+static Arena arena_spawn(Arena* parent, int64_t size)
 {
     void* ptr = arena_alloc_bytes(parent, size);
     assert(ptr);
@@ -139,6 +139,7 @@ static Arena arena_spawn(Arena* parent, size_t size)
 
 static void arena_reset(Arena* arena)
 {
+    for (int64_t i = 0; i < arena->count; ++i) arena->ptr[i] = 0;
     arena->count = 0;
 }
 
