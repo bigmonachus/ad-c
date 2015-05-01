@@ -98,26 +98,21 @@ static int win32_setup_context(HWND window, HGLRC* context)
 {
     int format_index = 0;
 
-    PIXELFORMATDESCRIPTOR pfd = {
-        sizeof(PIXELFORMATDESCRIPTOR),   // size of this pfd
-        1,                     // version number
-        PFD_DRAW_TO_WINDOW |   // support window
+    PIXELFORMATDESCRIPTOR pfd = { 0 };
+    {
+        pfd.nSize = sizeof(PIXELFORMATDESCRIPTOR);
+        pfd.nVersion = 1;
+        pfd.dwFlags =
+            PFD_DRAW_TO_WINDOW |   // support window
             PFD_SUPPORT_OPENGL |   // support OpenGL
-            PFD_DOUBLEBUFFER,      // double buffered
-        PFD_TYPE_RGBA,         // RGBA type
-        32,                    // 32-bit color depth
-        0, 0, 0, 0, 0, 0,      // color bits ignored
-        0,                     // no alpha buffer
-        0,                     // shift bit ignored
-        0,                     // no accumulation buffer
-        0, 0, 0, 0,            // accum bits ignored
-        24,                    // 24-bit z-buffer
-        8,                     // 8-bit stencil buffer
-        0,                     // no auxiliary buffer
-        PFD_MAIN_PLANE,        // main layer
-        0,                     // reserved
-        0, 0, 0                // layer masks ignored
-    };
+            PFD_DOUBLEBUFFER;      // double buffered
+        pfd.iPixelType = PFD_TYPE_RGBA;
+        pfd.cColorBits = 32;
+        pfd.cDepthBits = 24;
+        pfd.cStencilBits = 8;
+        pfd.iLayerType = PFD_MAIN_PLANE;
+    }
+
 
     // get the best available match of pixel format for the device context
     format_index = ChoosePixelFormat(GetDC(window), &pfd);
@@ -150,6 +145,7 @@ static int win32_setup_context(HWND window, HGLRC* context)
         OutputDebugStringA("Could not init glew.\n");
         return 0;
     }
+
     const int pixel_attribs[] =
     {
         WGL_ACCELERATION_ARB   , WGL_FULL_ACCELERATION_ARB           ,
@@ -163,20 +159,30 @@ static int win32_setup_context(HWND window, HGLRC* context)
         0                      ,
     };
     UINT num_formats = 0;
-    wglChoosePixelFormatARB(GetDC(window), pixel_attribs, NULL, 10 /*max_formats*/, &format_index, &num_formats);
+
+    int format_indices[20];
+
+    wglChoosePixelFormatARB(GetDC(window),
+            pixel_attribs, NULL, 20 /*max_formats*/, format_indices, &num_formats);
     if (!num_formats)
     {
         OutputDebugStringA("Could not choose pixel format. Exiting.");
         return 0;
     }
 
-    succeeded = 0;
-    for (uint32_t i = 0; i < num_formats - 1; ++i)
+    // The spec *guarantees* that this does not happen but nothing ever works...
+    if (num_formats > 20)
     {
-        int local_index = (&format_index)[i];
+        num_formats = 20;
+    }
+
+    succeeded = 0;
+    for (uint32_t i = 0; i < num_formats; ++i)
+    {
+        int local_index = format_indices[i];
         succeeded = SetPixelFormat(GetDC(window), local_index, &pfd);
         if (succeeded)
-            return 0;
+            break;
     }
     if (!succeeded)
     {
