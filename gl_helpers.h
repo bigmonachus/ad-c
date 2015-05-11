@@ -2,6 +2,15 @@
 
 #define GLCHK(stmt) stmt; gl_query_error(#stmt, __FILE__, __LINE__)
 
+void gl_log(char* str)
+{
+#ifdef _WIN32
+    OutputDebugStringA(str);
+#else
+    fprintf(stderr, "%s", str);
+#endif
+}
+
 void gl_query_error(const char* expr, const char* file, int line)
 {
     GLenum err = glGetError();
@@ -35,10 +44,10 @@ void gl_query_error(const char* expr, const char* file, int line)
         default:
             str = "SOME GL ERROR";
         }
-        sprintf_s(buffer, 256, "%s in: %s:%d\n", str, file, line);
-        OutputDebugStringA(buffer);
-        sprintf_s(buffer, 256, "   ---- Expression: %s\n", expr);
-        OutputDebugStringA(buffer);
+        snprintf(buffer, 256, "%s in: %s:%d\n", str, file, line);
+        gl_log(buffer);
+        snprintf(buffer, 256, "   ---- Expression: %s\n", expr);
+        gl_log(buffer);
     }
 }
 
@@ -57,8 +66,8 @@ static GLuint gl_compile_shader(const char* src, GLuint type)
         char* log = (char*)malloc((size_t)length);
         GLsizei written_len;
         GLCHK ( glGetShaderInfoLog(obj, length, &written_len, log) );
-        OutputDebugStringA("Shader compilation failed. \n    ---- Info log:\n");
-        OutputDebugStringA(log);
+        gl_log("Shader compilation failed. \n    ---- Info log:\n");
+        gl_log(log);
         free(log);
     }
     return obj;
@@ -79,13 +88,13 @@ static void gl_link_program(GLuint obj, GLuint shaders[], int64_t num_shaders)
     GLCHK ( glGetProgramiv(obj, GL_LINK_STATUS, &res) );
     if (!res)
     {
-        OutputDebugStringA("ERROR: program did not link.\n");
+        gl_log("ERROR: program did not link.\n");
         GLint len;
         glGetProgramiv(obj, GL_INFO_LOG_LENGTH, &len);
         GLsizei written_len;
         char* log = (char*)malloc((size_t)len);
         glGetProgramInfoLog(obj, (GLsizei)len, &written_len, log);
-        OutputDebugStringA(log);
+        gl_log(log);
         free(log);
     }
     GLCHK ( glValidateProgram(obj) );
@@ -122,27 +131,27 @@ static int win32_setup_context(HWND window, HGLRC* context)
 
     if (!succeeded)
     {
-        OutputDebugStringA("Could not set pixel format\n");
+        gl_log("Could not set pixel format\n");
         return 0;
     }
 
     HGLRC dummy_context = wglCreateContext(GetDC(window));
     if (!dummy_context)
     {
-        OutputDebugStringA("Could not create GL context. Exiting");
+        gl_log("Could not create GL context. Exiting");
         return 0;
     }
     wglMakeCurrent(GetDC(window), dummy_context);
     if (!succeeded)
     {
-        OutputDebugStringA("Could not set current GL context. Exiting");
+        gl_log("Could not set current GL context. Exiting");
         return 0;
     }
 
     GLenum glew_result = glewInit();
     if (glew_result != GLEW_OK)
     {
-        OutputDebugStringA("Could not init glew.\n");
+        gl_log("Could not init glew.\n");
         return 0;
     }
 
@@ -166,7 +175,7 @@ static int win32_setup_context(HWND window, HGLRC* context)
             pixel_attribs, NULL, 20 /*max_formats*/, format_indices, &num_formats);
     if (!num_formats)
     {
-        OutputDebugStringA("Could not choose pixel format. Exiting.");
+        gl_log("Could not choose pixel format. Exiting.");
         return 0;
     }
 
@@ -186,7 +195,7 @@ static int win32_setup_context(HWND window, HGLRC* context)
     }
     if (!succeeded)
     {
-        OutputDebugStringA("Could not set pixel format for final rendering context.\n");
+        gl_log("Could not set pixel format for final rendering context.\n");
         return 0;
     }
 

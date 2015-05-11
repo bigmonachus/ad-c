@@ -25,27 +25,14 @@
 #include "serg_io.h"
 #include "memory.h"
 
-// ============================================================
-// ad-C
-// ============================================================
-
-#define ADC__STR(a) #a
-#define ADC__FUNCPOST(post) __FUNCTION__#post
-#define ADC__PREPOST(pre,post) pre##ADC__FUNCPOST(post)
-#define adc_string_type(name) ADC__PREPOST(ADC__STR(ADC_TYPE__FUNC__),__NAME__##name)
-#define adc_local_type(func, name) ADC_TYPE__FUNC__ ## func ## __NAME__ ## name
-
-/* #define EXPAND(x) #x */
-/* #define EXPANDED(x) EXPAND(X) */
-/* #define INTERNAL_TYPE(f, var) ADC_TYPE__FUNC__#f#__NAME__##var */
-
 void meta_clear_file(const char* fname);
 
 // NOTE: this function dumbly replaces text. It doesn't care about grammar.
 // e.g. it will replace tokens inside of strings.
 void meta_expand(
-        const char* output_path,
+        const char* result_path,
         const char* tmpl_path,
+        const int num_bindings,
         ...);
 
 // Searches for *.c *.h *.cpp and *.cc files in directory_path, parses them,
@@ -231,16 +218,16 @@ static int is_whitespace(char c)
 
 static int is_ident_char(char c)
 {
-    char idents[]=
-        {
-            'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-            'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F',
-            'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
-            'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-            '_',
-            '.', // We treat accessors as part of the identifier
-            ':', // special support for light c++
-        };
+    static char idents[] =
+    {
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+        'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F',
+        'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
+        'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '_',
+        '.', // We treat accessors as part of the identifier
+        ':', // special support for light c++
+    };
     for (int i = 0; i < sizeof(idents); ++i)
     {
         if (c == idents[i])
@@ -589,7 +576,8 @@ void meta_type_info(
         while(ent)
         {
             fname[0] = '\0';
-            strcat(fname, dir->name);
+            // TODO: this does not compile on OSX. FIXME
+            //strcat(fname, dir->dname);
             fname[strlen(fname) - 1] = '\0'; // Remove * character
             strcat(fname, ent->d_name);
 
