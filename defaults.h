@@ -1,4 +1,4 @@
-// types.h
+// defaults.h
 // (c) Copyright 2015 Sergio Gonzalez
 
 #pragma once
@@ -24,4 +24,10 @@ typedef int32_t     bool32;
 #define false 0
 #else
 #error "false is already defined"
+#endif
+
+#ifndef stack_count
+#define stack_count(a) (sizeof((a)) / sizeof((a)[0]))
+#else
+#error "stack_count is already defined"
 #endif
