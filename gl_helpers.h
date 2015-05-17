@@ -69,6 +69,7 @@ static GLuint gl_compile_shader(const char* src, GLuint type)
         gl_log("Shader compilation failed. \n    ---- Info log:\n");
         gl_log(log);
         free(log);
+        assert(!"Shader compilation error");
     }
     return obj;
 }
@@ -96,6 +97,7 @@ static void gl_link_program(GLuint obj, GLuint shaders[], int64_t num_shaders)
         glGetProgramInfoLog(obj, (GLsizei)len, &written_len, log);
         gl_log(log);
         free(log);
+        assert(!"program linking error");
     }
     GLCHK ( glValidateProgram(obj) );
 }
