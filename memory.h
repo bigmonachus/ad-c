@@ -25,7 +25,15 @@ typedef struct Arena_s
     int64_t size;
     int64_t count;
     int8_t* ptr;
+    int     num_children;  // For arena_push
 } Arena;
+
+typedef struct TempArena_s
+{
+    Arena*  parent;
+    Arena   arena;
+    int     id;
+} TempArena;
 
 // =========================================
 // ==== Arena creation                  ====
@@ -36,12 +44,27 @@ static Arena arena_init(void* base, int64_t size);
 // Create a child arena.
 static Arena arena_spawn(Arena* parent, int64_t size);
 
+// ==== Temporary arenas.
+// Usage:
+//      child = arena_push(my_arena, some_size);
+//      use_temporary_arena(&child.arena);
+//      arena_pop(child);
+static TempArena    arena_push(Arena* parent, int64_t size);
+static void         arena_pop (TempArena* child);
+
 // =========================================
 // ====          Allocation             ====
 // =========================================
 #define      arena_alloc_elem(arena, T)         (T *)arena_alloc_bytes((arena), sizeof(T))
 #define      arena_alloc_array(arena, count, T) (T *)arena_alloc_bytes((arena), (count) * sizeof(T))
 static void* arena_alloc_bytes (Arena* arena, size_t num_bytes);
+
+// =========================================
+// ====        Utility                  ====
+// =========================================
+
+#define arena_available_space(arena)    ((arena)->size - (arena)->count)
+#define ARENA_VALIDATE(arena)           assert ((arena)->num_children == 0)
 
 // =========================================
 // ====            Reuse                ====
@@ -137,9 +160,42 @@ static Arena arena_spawn(Arena* parent, int64_t size)
     return child;
 }
 
+static TempArena arena_push(Arena* parent, int64_t size)
+{
+    assert ( size <= arena_available_space(parent));
+    TempArena child = { 0 };
+    {
+        child.parent = parent;
+        child.id     = parent->num_children;
+        Arena arena = { 0 };
+        {
+            void* ptr = arena_alloc_bytes(parent, size);
+            parent->num_children += 1;
+            arena.ptr = ptr;
+            arena.size = size;
+        }
+        child.arena = arena;
+    }
+    return child;
+}
+
+static void arena_pop(TempArena* child)
+{
+    Arena* parent = child->parent;
+
+    // Assert that this child was the latest push.
+    assert ((parent->num_children - 1) == child->id);
+
+    parent->ptr = child->arena.ptr;
+    parent->count -= child->arena.size;
+    parent->num_children -= 1;
+
+    *child = (TempArena){ 0 };
+}
+
 static void arena_reset(Arena* arena)
 {
-    for (int64_t i = 0; i < arena->count; ++i) arena->ptr[i] = 0;
+    for (int64_t i = 0; i < arena->count; ++i) { arena->ptr[i] = 0; }
     arena->count = 0;
 }
 
