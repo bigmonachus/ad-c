@@ -125,7 +125,7 @@ void meta_expand(
     char prev = 0;
     char* name = arena_array(&root_arena, char, 1000);
     int name_len = 0;
-    for (int i = 0; i < data_size; ++i)
+    for (int i = 0; i < data_size - 1; ++i)  // Don't count EOF
     {
         char c = in_data[i];
         // Handle transitions
@@ -182,9 +182,8 @@ void meta_expand(
     }
 
     array_push(out_data, '\n');
-    array_push(out_data, '\n');
 
-    fwrite(out_data, sizeof(char), array_count(out_data) - 1, out_fd);
+    fwrite(out_data, sizeof(char), array_count(out_data), out_fd);
     fclose(out_fd);
     free(big_block_of_memory);
 }
