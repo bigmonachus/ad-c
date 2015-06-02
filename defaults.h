@@ -3,6 +3,11 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 // Rename types for convenience
 typedef int8_t      int8;
 typedef uint8_t     uint8;
@@ -30,4 +35,8 @@ typedef int32_t     bool32;
 #define stack_count(a) (sizeof((a)) / sizeof((a)[0]))
 #else
 #error "stack_count is already defined"
+#endif
+
+#ifdef __cplusplus
+}
 #endif
