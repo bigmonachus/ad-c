@@ -185,8 +185,11 @@ static void arena_pop(TempArena* child)
 
     // Assert that this child was the latest push.
     assert ((parent->num_children - 1) == child->id);
+    for (int64_t i = 0; i < child->arena.count; ++i)
+    {
+        child->arena.ptr[i] = 0;
+    }
 
-    parent->ptr = child->arena.ptr;
     parent->count -= child->arena.size;
     parent->num_children -= 1;
 
