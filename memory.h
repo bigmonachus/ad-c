@@ -20,20 +20,20 @@ extern "C"
 
 #include <stdint.h>
 
-typedef struct Arena_s
+typedef struct Arena_s Arena;
+
+struct Arena_s
 {
+    // Memory:
     int64_t size;
     int64_t count;
     int8_t* ptr;
-    int     num_children;  // For arena_push
-} Arena;
 
-typedef struct TempArena_s
-{
+    // For pushing/popping
     Arena*  parent;
-    Arena   arena;
     int     id;
-} TempArena;
+    int     num_children;
+};
 
 // =========================================
 // ==== Arena creation                  ====
@@ -49,8 +49,8 @@ static Arena arena_spawn(Arena* parent, int64_t size);
 //      child = arena_push(my_arena, some_size);
 //      use_temporary_arena(&child.arena);
 //      arena_pop(child);
-static TempArena    arena_push(Arena* parent, int64_t size);
-static void         arena_pop (TempArena* child);
+static Arena    arena_push(Arena* parent, int64_t size);
+static void     arena_pop (Arena* child);
 
 // =========================================
 // ====          Allocation             ====
@@ -160,40 +160,37 @@ static Arena arena_spawn(Arena* parent, int64_t size)
     return child;
 }
 
-static TempArena arena_push(Arena* parent, int64_t size)
+static Arena arena_push(Arena* parent, int64_t size)
 {
     assert ( size <= arena_available_space(parent));
-    TempArena child = { 0 };
+    Arena child = { 0 };
     {
         child.parent = parent;
         child.id     = parent->num_children;
-        Arena arena = { 0 };
-        {
-            void* ptr = arena_alloc_bytes(parent, size);
-            parent->num_children += 1;
-            arena.ptr = ptr;
-            arena.size = size;
-        }
-        child.arena = arena;
+        void* ptr = arena_alloc_bytes(parent, size);
+        parent->num_children += 1;
+        child.ptr = ptr;
+        child.size = size;
     }
     return child;
 }
 
-static void arena_pop(TempArena* child)
+static void arena_pop(Arena* child)
 {
     Arena* parent = child->parent;
+    assert(parent);
 
     // Assert that this child was the latest push.
     assert ((parent->num_children - 1) == child->id);
-    for (int64_t i = 0; i < child->arena.count; ++i)
-    {
-        child->arena.ptr[i] = 0;
-    }
 
-    parent->count -= child->arena.size;
+    parent->count -= child->size;
+    for (int64_t i = parent->count; i < (parent->count + child->count); ++i)
+    {
+        parent->ptr[i] = 0;
+    }
     parent->num_children -= 1;
 
-    *child = (TempArena){ 0 };
+    *child = (Arena){ 0 };
 }
 
 static void arena_reset(Arena* arena)
