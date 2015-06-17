@@ -25,8 +25,8 @@ typedef struct Arena_s Arena;
 struct Arena_s
 {
     // Memory:
-    int64_t size;
-    int64_t count;
+    size_t size;
+    size_t count;
     int8_t* ptr;
 
     // For pushing/popping
@@ -40,16 +40,16 @@ struct Arena_s
 // =========================================
 
 // Create a root arena from a memory block.
-static Arena arena_init(void* base, int64_t size);
+static Arena arena_init(void* base, size_t size);
 // Create a child arena.
-static Arena arena_spawn(Arena* parent, int64_t size);
+static Arena arena_spawn(Arena* parent, size_t size);
 
 // ==== Temporary arenas.
 // Usage:
 //      child = arena_push(my_arena, some_size);
 //      use_temporary_arena(&child.arena);
 //      arena_pop(child);
-static Arena    arena_push(Arena* parent, int64_t size);
+static Arena    arena_push(Arena* parent, size_t size);
 static void     arena_pop (Arena* child);
 
 // =========================================
@@ -97,8 +97,8 @@ static void arena_reset(Arena* arena);
 #pragma pack(push, 1)
 typedef struct
 {
-    int64_t size;
-    int64_t count;
+    size_t size;
+    size_t count;
 } ArrayHeader;
 #pragma pack(pop)
 
@@ -125,7 +125,7 @@ static void arena__array_try_grow(void* array)
 
 static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
 {
-    int64_t total = arena->count + num_bytes;
+    size_t total = arena->count + num_bytes;
     if (total > arena->size)
     {
         assert(!"Arena full.");
@@ -135,7 +135,7 @@ static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
     return result;
 }
 
-static Arena arena_init(void* base, int64_t size)
+static Arena arena_init(void* base, size_t size)
 {
     Arena arena = { 0 };
     arena.ptr = (int8_t*)base;
@@ -146,7 +146,7 @@ static Arena arena_init(void* base, int64_t size)
     return arena;
 }
 
-static Arena arena_spawn(Arena* parent, int64_t size)
+static Arena arena_spawn(Arena* parent, size_t size)
 {
     void* ptr = arena_alloc_bytes(parent, size);
     assert(ptr);
@@ -160,7 +160,7 @@ static Arena arena_spawn(Arena* parent, int64_t size)
     return child;
 }
 
-static Arena arena_push(Arena* parent, int64_t size)
+static Arena arena_push(Arena* parent, size_t size)
 {
     assert ( size <= arena_available_space(parent));
     Arena child = { 0 };
@@ -184,10 +184,15 @@ static void arena_pop(Arena* child)
     assert ((parent->num_children - 1) == child->id);
 
     parent->count -= child->size;
-    for (int64_t i = parent->count; i < (parent->count + child->count); ++i)
+#if 0
+    for (size_t i = parent->count; i < (parent->count + child->count); ++i)
     {
         parent->ptr[i] = 0;
     }
+#else
+    char* ptr = (char*)(parent->ptr) + parent->count;
+    memset(ptr, 0, child->count);
+#endif
     parent->num_children -= 1;
 
     *child = (Arena){ 0 };
@@ -195,7 +200,7 @@ static void arena_pop(Arena* child)
 
 static void arena_reset(Arena* arena)
 {
-    for (int64_t i = 0; i < arena->count; ++i) { arena->ptr[i] = 0; }
+    for (size_t i = 0; i < arena->count; ++i) { arena->ptr[i] = 0; }
     arena->count = 0;
 }
 
