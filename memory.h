@@ -57,7 +57,7 @@ static void     arena_pop (Arena* child);
 // =========================================
 #define      arena_alloc_elem(arena, T)         (T *)arena_alloc_bytes((arena), sizeof(T))
 #define      arena_alloc_array(arena, count, T) (T *)arena_alloc_bytes((arena), (count) * sizeof(T))
-static void* arena_alloc_bytes (Arena* arena, size_t num_bytes);
+static void* arena_alloc_bytes(Arena* arena, size_t num_bytes);
 
 // =========================================
 // ====        Utility                  ====

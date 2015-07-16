@@ -35,12 +35,16 @@ void gl_query_error(const char* expr, const char* file, int line)
         case GL_OUT_OF_MEMORY:
             str = "GL_OUT_OF_MEMORY";
             break;
+#ifdef GL_STACK_OVERFLOW
         case GL_STACK_OVERFLOW:
             str = "GL_STACK_OVERFLOW";
             break;
+#endif
+#ifdef GL_STACK_UNDERFLOW
         case GL_STACK_UNDERFLOW:
             str = "GL_STACK_UNDERFLOW";
             break;
+#endif
         default:
             str = "SOME GL ERROR";
         }
