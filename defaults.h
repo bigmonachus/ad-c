@@ -8,17 +8,54 @@ extern "C"
 {
 #endif
 
-typedef int8_t	    i8;
-typedef int16_t	    i16;
-typedef int32_t     i32;
-typedef int64_t     i64;
 
-typedef uint8_t	    u8;
-typedef uint16_t    u16;
-typedef uint32_t    u32;
-typedef uint64_t    u64;
+#ifndef i8
+#define i8 int8_t
+#else
+#error "i8 already defined"
+#endif
+#ifndef i16
+#define i16 int16_t
+#else
+#error "i16 already defined"
+#endif
+#ifndef i32
+#define i32 int32_t
+#else
+#error "i32 already defined"
+#endif
+#ifndef i64
+#define i64 int64_t
+#else
+#error "i64 already defined"
+#endif
 
-typedef float	    f32;
+#ifndef u8
+#define u8 uint8_t
+#else
+#error "u8 already defined"
+#endif
+#ifndef u16
+#define u16 uint16_t
+#else
+#error "u16 already defined"
+#endif
+#ifndef u32
+#define u32 uint32_t
+#else
+#error "u32 already defined"
+#endif
+#ifndef u64
+#define u64 uint64_t
+#else
+#error "u64 already defined"
+#endif
+
+#ifndef f32
+#define f32 float
+#else
+#error "f32 already defined"
+#endif
 
 #ifndef b32
 #define		    b32 int
