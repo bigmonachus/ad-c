@@ -8,7 +8,7 @@ extern "C"
 {
 #endif
 
-#undef stack_count(a)
+#undef stack_count
 #undef false
 #undef true
 #undef f32
