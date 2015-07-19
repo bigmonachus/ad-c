@@ -13,6 +13,8 @@ extern "C"
 {
 #endif
 
+#include <assert.h>
+
 #ifndef SGL_DO_NOT_DEFINE_DEFAULTS
 #include "defaults.h"
 #endif
@@ -20,6 +22,16 @@ extern "C"
 // Platform-agnostic definitions.
 typedef struct SglMutex_s SglMutex;
 typedef struct SglSemaphore_s SglSemaphore;
+
+static i32 sgl_cpu_count();
+static SglSemaphore* sgl_create_semaphore(i32 value);
+static int sgl_semaphore_wait(SglSemaphore* sem);
+static int sgl_semaphore_signal(SglSemaphore* sem);
+static SglMutex* sgl_create_mutex();
+static i32 sgl_mutex_lock(SglMutex* mutex);
+static i32 sgl_mutex_unlock(SglMutex* mutex);
+static void sgl_destroy_mutex(SglMutex* mutex);
+static void sgl_create_thread(void (*thread_func)(void*), void* params);
 
 // =================================
 // Windows
@@ -31,6 +43,10 @@ typedef struct SglSemaphore_s SglSemaphore;
 
 #ifndef sgl_malloc
 #define sgl_malloc malloc
+#endif
+
+#ifndef sgl_free
+#define sgl_free free
 #endif
 
 #define SGL_MAX_SEMAPHORE_VALUE (1 << 16)
@@ -61,7 +77,7 @@ static SglSemaphore* sgl_create_semaphore(i32 value)
     sem->value = value;
     if (!sem->handle)
     {
-        free (sem);
+        sgl_free (sem);
         sem = NULL;
     }
     return sem;
@@ -135,7 +151,7 @@ static void sgl_destroy_mutex(SglMutex* mutex)
     if (mutex)
     {
         DeleteCriticalSection(&mutex->critical_section);
-        free(mutex);
+        sgl_free(mutex);
     }
 }
 
@@ -144,11 +160,132 @@ static void sgl_create_thread(void (*thread_func)(void*), void* params)
     _beginthread(thread_func, 0, params);
 }
 
-#endif  // WIN32
 // =================================
 // End of Windows
 // =================================
 
+// =================================
+// Start of Linux
+// =================================
+#elif __linux
+
+#include <pthread.h>
+#include <semaphore.h>
+
+static i32 sgl_cpu_count()
+{
+    // Pretty much copy paste from SDL
+    i32 count = -1;
+#if defined(HAVE_SYSCONF) && defined(_SC_NPROCESSORS_ONLN)
+        if (count <= 0) {
+            count = (int)sysconf(_SC_NPROCESSORS_ONLN);
+        }
+#endif
+#ifdef HAVE_SYSCTLBYNAME
+        if (count <= 0) {
+            size_t size = sizeof(count);
+            sysctlbyname("hw.ncpu", &count, &size, NULL, 0);
+        }
+#endif
+        if (count <= 0)
+        {
+            count = 1;
+        }
+        return count;
+}
+
+struct SglSemaphore_s
+{
+    sem_t sem;
+};
+
+static SglSemaphore* sgl_create_semaphore(i32 value)
+{
+    SglSemaphore* sem = (SglSemaphore*)sgl_malloc(sizeof(SglSemaphore));
+    int err = sem_init(&sem->sem, 0, value);
+    if (err < 0)
+    {
+        sgl_free(sem);
+        return NULL;
+    }
+    return sem;
+}
+
+static int sgl_semaphore_wait(SglSemaphore* sem)
+{
+    return sem_wait(&sem->sem);
+}
+
+static int sgl_semaphore_signal(SglSemaphore* sem)
+{
+    return sem_post(&sem->sem);
+}
+struct SglMutex_s
+{
+    pthread_mutex_t handle;
+};
+
+static SglMutex* sgl_create_mutex()
+{
+    SglMutex* mutex = (SglMutex*) sgl_malloc(sizeof(SglMutex));
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+
+    if (pthread_mutex_init(&mutex->handle, &attr) != 0) {
+        sgl_free(mutex);
+        return NULL;
+    }
+    return mutex;
+}
+
+static i32 sgl_mutex_lock(SglMutex* mutex)
+{
+    if (pthread_mutex_lock(&mutex->handle) < 0)
+    {
+        return -1;
+    }
+    return 0;
+}
+
+static i32 sgl_mutex_unlock(SglMutex* mutex)
+{
+    if (pthread_mutex_unlock(&mutex->handle) < 0)
+    {
+        return SDL_SetError("pthread_mutex_unlock() failed");
+    }
+
+    return 0;
+}
+
+static void sgl_destroy_mutex(SglMutex* mutex)
+{
+    pthread_mutex_destroy(&mutex->handle);
+    sgl_free(mutex);
+}
+
+static void sgl_create_thread(void (*thread_func)(void*), void* params)
+{
+    pthread_attr_t attr;
+
+    /* Set the thread attributes */
+    if (pthread_attr_init(&attr) != 0)
+    {
+        assert(!"Not handling thread attribute failure.");
+    }
+    //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+    pthread_t leaked_thread;
+    if (pthread_create(&leaked_thread, &attr, thread_func, params) != 0)
+    {
+        assert (!"God dammit");
+    }
+}
+
+// =================================
+// End of Linux
+// =================================
+#endif  // Platforms
 #ifndef SGL_DO_NOT_DEFINE_DEFAULTS
 #include "undef_defaults.h"
 #endif

@@ -8,6 +8,8 @@ extern "C"
 {
 #endif
 
+#include <stdint.h>
+
 
 #ifndef i8
 #define i8 int8_t

@@ -18,6 +18,8 @@ extern "C"
 #include <assert.h>
 #endif
 
+#include <stdlib.h>  // memcpy
+#include <string.h>  // memset
 #include <stdint.h>
 
 typedef struct Arena_s Arena;
