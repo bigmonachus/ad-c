@@ -25,8 +25,8 @@ typedef struct SglSemaphore_s SglSemaphore;
 
 static i32 sgl_cpu_count();
 static SglSemaphore* sgl_create_semaphore(i32 value);
-static int sgl_semaphore_wait(SglSemaphore* sem);
-static int sgl_semaphore_signal(SglSemaphore* sem);
+static i32 sgl_semaphore_wait(SglSemaphore* sem);
+static i32 sgl_semaphore_signal(SglSemaphore* sem);
 static SglMutex* sgl_create_mutex();
 static i32 sgl_mutex_lock(SglMutex* mutex);
 static i32 sgl_mutex_unlock(SglMutex* mutex);
@@ -39,7 +39,7 @@ static void sgl_create_thread(void (*thread_func)(void*), void* params);
 #ifdef WIN32
 #include <Windows.h>
 #include <process.h>
-#include <malloc.h>  // For simplicity, we are alloating stuff with mallocs.
+#include <malloc.h>  // For simplicity, we are alloating stuff with malloc.
 
 #ifndef sgl_malloc
 #define sgl_malloc malloc
@@ -66,7 +66,7 @@ static i32 sgl_cpu_count()
 {
     SYSTEM_INFO info;
     GetSystemInfo(&info);
-    int count = info.dwNumberOfProcessors;
+    i32 count = info.dwNumberOfProcessors;
     return count;
 }
 
@@ -84,9 +84,9 @@ static SglSemaphore* sgl_create_semaphore(i32 value)
 }
 
 // Will return non-zero on error
-static int sgl_semaphore_wait(SglSemaphore* sem)
+static i32 sgl_semaphore_wait(SglSemaphore* sem)
 {
-    int result;
+    i32 result;
 
     if (!sem) {
         return -1;
@@ -114,7 +114,7 @@ static int sgl_semaphore_wait(SglSemaphore* sem)
     return result;
 }
 
-static int sgl_semaphore_signal(SglSemaphore* sem)
+static i32 sgl_semaphore_signal(SglSemaphore* sem)
 {
     InterlockedIncrement(&sem->value);
     if (ReleaseSemaphore(sem->handle, 1, NULL) == FALSE)
@@ -178,7 +178,7 @@ static i32 sgl_cpu_count()
     i32 count = -1;
 #if defined(HAVE_SYSCONF) && defined(_SC_NPROCESSORS_ONLN)
         if (count <= 0) {
-            count = (int)sysconf(_SC_NPROCESSORS_ONLN);
+            count = (i32)sysconf(_SC_NPROCESSORS_ONLN);
         }
 #endif
 #ifdef HAVE_SYSCTLBYNAME
@@ -202,7 +202,7 @@ struct SglSemaphore_s
 static SglSemaphore* sgl_create_semaphore(i32 value)
 {
     SglSemaphore* sem = (SglSemaphore*)sgl_malloc(sizeof(SglSemaphore));
-    int err = sem_init(&sem->sem, 0, value);
+    i32 err = sem_init(&sem->sem, 0, value);
     if (err < 0)
     {
         sgl_free(sem);
@@ -211,12 +211,12 @@ static SglSemaphore* sgl_create_semaphore(i32 value)
     return sem;
 }
 
-static int sgl_semaphore_wait(SglSemaphore* sem)
+static i32 sgl_semaphore_wait(SglSemaphore* sem)
 {
     return sem_wait(&sem->sem);
 }
 
-static int sgl_semaphore_signal(SglSemaphore* sem)
+static i32 sgl_semaphore_signal(SglSemaphore* sem)
 {
     return sem_post(&sem->sem);
 }
