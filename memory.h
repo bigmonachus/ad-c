@@ -202,7 +202,11 @@ static void arena_pop(Arena* child)
 
 static void arena_reset(Arena* arena)
 {
+#if 0
     for (size_t i = 0; i < arena->count; ++i) { arena->ptr[i] = 0; }
+#else
+    memset (arena->ptr, 0, arena->count);
+#endif
     arena->count = 0;
 }
 
