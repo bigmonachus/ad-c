@@ -1,8 +1,10 @@
+// meta.h
+// (c) Copyright 2015 Sergio Gonzalez
+//
+// Released under the MIT license. See LICENSE.txt
+
 /**
- * meta.h
- *  Sergio Gonzalez
  *
- * [WIP]
  * Tools for doing meta-programming
  *
  */

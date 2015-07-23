@@ -1,6 +1,9 @@
+// threads.h
+// (c) Copyright 2015 Sergio Gonzalez
+//
+// Released under the MIT license. See LICENSE.txt
+
 /**
- * threads.h
- *  Sergio Gonzalez
  *
  *  Thin abstraction over Win32/pthreads threading libraries
  *

@@ -1,5 +1,7 @@
 // undef_defaults.h
 // (c) Copyright 2015 Sergio Gonzalez
+//
+// Released under the MIT license. See LICENSE.txt
 
 #pragma once
 

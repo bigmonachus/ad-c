@@ -1,9 +1,13 @@
+// memory.h
+// (c) Copyright 2015 Sergio Gonzalez
+//
+// Released under the MIT license. See LICENSE.txt
+
+//
+
 /**
- * memory.h
- *  Sergio Gonzalez
  *
  * Interface for simple arena/zone/region memory managment.
- * Includes functions for arrays.
  *
  */
 
