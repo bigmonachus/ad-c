@@ -255,7 +255,7 @@ static i32 sgl_mutex_unlock(SglMutex* mutex)
 {
     if (pthread_mutex_unlock(&mutex->handle) < 0)
     {
-        return SDL_SetError("pthread_mutex_unlock() failed");
+        return -1;
     }
 
     return 0;
