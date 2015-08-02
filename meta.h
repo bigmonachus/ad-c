@@ -668,8 +668,8 @@ void meta_type_info(
             {
                 puts("==== Valid type");
                 puts(func_name);
-                char* identifier[1024] = { 0 };
-                char* type_str[1024] = { 0 };
+                char identifier[1024] = { 0 };
+                char type_str[1024] = { 0 };
                 sprintf((char*)identifier, "ADC_TYPE__FUNC__%s__NAME__%s",
                                 func_name, var_name);
                 for (int i = end - 2; i >= begin + 1; --i)

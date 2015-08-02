@@ -36,14 +36,6 @@ static i32 sgl_mutex_unlock(SglMutex* mutex);
 static void sgl_destroy_mutex(SglMutex* mutex);
 static void sgl_create_thread(void (*thread_func)(void*), void* params);
 
-// =================================
-// Windows
-// =================================
-#ifdef WIN32
-#include <Windows.h>
-#include <process.h>
-#include <malloc.h>  // For simplicity, we are alloating stuff with malloc.
-
 #ifndef sgl_malloc
 #define sgl_malloc malloc
 #endif
@@ -51,6 +43,14 @@ static void sgl_create_thread(void (*thread_func)(void*), void* params);
 #ifndef sgl_free
 #define sgl_free free
 #endif
+
+// =================================
+// Windows
+// =================================
+#ifdef WIN32
+#include <Windows.h>
+#include <process.h>
+
 
 #define SGL_MAX_SEMAPHORE_VALUE (1 << 16)
 
@@ -279,7 +279,7 @@ static void sgl_create_thread(void (*thread_func)(void*), void* params)
     //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     pthread_t leaked_thread;
-    if (pthread_create(&leaked_thread, &attr, thread_func, params) != 0)
+    if (pthread_create(&leaked_thread, &attr, (void*)(void*)thread_func, params) != 0)
     {
         assert (!"God dammit");
     }
