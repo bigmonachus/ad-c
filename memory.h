@@ -134,7 +134,7 @@ static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
     size_t total = arena->count + num_bytes;
     if (total > arena->size)
     {
-        assert(!"Arena full.");
+        return NULL;
     }
     void* result = arena->ptr + arena->count;
     arena->count += num_bytes;
