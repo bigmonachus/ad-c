@@ -195,7 +195,7 @@ static Arena arena_init(void* base, size_t size)
 
 static Arena arena_spawn(Arena* parent, size_t size)
 {
-    void* ptr = arena_alloc_bytes(parent, size);
+    uint8_t* ptr = (uint8_t*)arena_alloc_bytes(parent, size);
     assert(ptr);
 
     Arena child = { 0 };
@@ -214,7 +214,7 @@ static Arena arena_push(Arena* parent, size_t size)
     {
         child.parent           = parent;
         child.id               = parent->num_children;
-        void* ptr              = arena_alloc_bytes(parent, size);
+        uint8_t* ptr           = (uint8_t*)arena_alloc_bytes(parent, size);
         child.ptr              = ptr;
         child.size             = size;
 
@@ -488,7 +488,7 @@ static void sgl_create_thread(void (*thread_func)(void*), void* params)
     //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     pthread_t leaked_thread;
-    if (pthread_create(&leaked_thread, &attr, (void*)(void*)thread_func, params) != 0)
+    if (pthread_create(&leaked_thread, &attr, (void*(*)(void*))(thread_func), params) != 0)
     {
         assert (!"God dammit");
     }
@@ -524,7 +524,7 @@ static char* sgl_slurp_file(const char* path, size_t *out_size)
         return NULL;
     }
     int len = sgli__bytes_in_fd(fd);
-    char* contents = sgl_malloc(len + 1);
+    char* contents = (char*)sgl_malloc(len + 1);
     if (contents)
     {
         const size_t read = (int)fread((void*)contents, 1, (size_t)len, fd);
