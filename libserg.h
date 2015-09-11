@@ -266,7 +266,7 @@ static void             sgl_create_thread(void (*thread_func)(void*), void* para
 // =================================
 // Windows
 // =================================
-#ifdef WIN32
+#if defined(_WIN32)
 #include <Windows.h>
 #include <process.h>
 
@@ -389,11 +389,14 @@ static void sgl_create_thread(void (*thread_func)(void*), void* params)
 // =================================
 // Start of Linux
 // =================================
-#elif __linux
-
+#elif defined(__linux__) || defined(__MACH__)
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
+#if defined(__MACH__)
+#include <fcntl.h>
+#include <sys/stat.h>
+#endif
 
 static int32_t sgl_cpu_count()
 {
@@ -408,13 +411,19 @@ static int32_t sgl_cpu_count()
 
 struct SglSemaphore_s
 {
-    sem_t sem;
+    sem_t* sem;
 };
 
 static SglSemaphore* sgl_create_semaphore(int32_t value)
 {
     SglSemaphore* sem = (SglSemaphore*)sgl_malloc(sizeof(SglSemaphore));
-    int32_t err = sem_init(&sem->sem, 0, value);
+#if defined(__linux__)
+    sem->sem = (sem_t*)sgl_malloc(sizeof(sem_t));
+    int err = sem_init(sem->sem, 0, value);
+#elif defined(__MACH__)
+    sem->sem = sem_open("sgl semaphore", O_CREAT, S_IRWXU, value);
+    int err = (sem->sem == SEM_FAILED) ? -1 : 0;
+#endif
     if (err < 0)
     {
         sgl_free(sem);
@@ -425,12 +434,12 @@ static SglSemaphore* sgl_create_semaphore(int32_t value)
 
 static int32_t sgl_semaphore_wait(SglSemaphore* sem)
 {
-    return sem_wait(&sem->sem);
+    return sem_wait(sem->sem);
 }
 
 static int32_t sgl_semaphore_signal(SglSemaphore* sem)
 {
-    return sem_post(&sem->sem);
+    return sem_post(sem->sem);
 }
 struct SglMutex_s
 {
