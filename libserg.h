@@ -236,7 +236,7 @@ static void arena_pop(Arena* child)
     memset(ptr, 0, child->count);
     parent->num_children -= 1;
 
-    *child = (Arena){ 0 };
+    memset(child, 0, sizeof(Arena));
 }
 
 static void arena_reset(Arena* arena)
