@@ -1,5 +1,6 @@
 /**
  * libserg.h
+ *  - Sergio Gonzalez
  *
  * This software is in the public domain. Where that dedication is not
  * recognized, you are granted a perpetual, irrevocable license to copy
@@ -10,6 +11,11 @@
 // Imitation is the sincerest form of flattery.
 //
 // In the style of stb, this is my "toolbox" for writing quick C99 programs.
+//
+// Features
+//  - C99, but avoids some of its nicer features for C++ compatibility.
+//
+// History at the bottom of the file.
 //
 // Other header-only libraries that might be of more practical use to people
 // other than myself:
@@ -33,9 +39,9 @@ extern "C"
 #include <stdio.h>
 
 
-// =================================================================================================
+// ====
 // MACROS
-// =================================================================================================
+// ====
 
 #ifndef sgl_malloc
 #define sgl_malloc malloc
@@ -51,14 +57,14 @@ extern "C"
 
 #define sgl_array_count(a) (sizeof((a))/sizeof((a)[0]))
 
-// =================================================================================================
+
+// ====
 // MEMORY
-// =================================================================================================
+// ====
+
 
 typedef struct Arena_s Arena;
-
-struct Arena_s
-{
+struct Arena_s {
     // Memory:
     size_t  size;
     size_t  count;
@@ -69,112 +75,73 @@ struct Arena_s
     int32_t     id;
     int32_t     num_children;
 };
-
-// =========================================
-// ==== Arena creation                  ====
-// =========================================
+// Note: Arenas are guaranteed to be zero-filled
 
 // Create a root arena from a memory block.
-static Arena arena_init(void* base, size_t size);
+Arena arena_init(void* base, size_t size);
 // Create a child arena.
-static Arena arena_spawn(Arena* parent, size_t size);
+Arena arena_spawn(Arena* parent, size_t size);
 
 // ==== Temporary arenas.
 // Usage:
 //      child = arena_push(my_arena, some_size);
 //      use_temporary_arena(&child.arena);
 //      arena_pop(child);
-static Arena    arena_push(Arena* parent, size_t size);
-static void     arena_pop (Arena* child);
+Arena    arena_push(Arena* parent, size_t size);
+void     arena_pop (Arena* child);
 
-// =========================================
-// ====          Allocation             ====
-// =========================================
 #define      arena_alloc_elem(arena, T)         (T *)arena_alloc_bytes((arena), sizeof(T))
 #define      arena_alloc_array(arena, count, T) (T *)arena_alloc_bytes((arena), (count) * sizeof(T))
-static void* arena_alloc_bytes(Arena* arena, size_t num_bytes);
-
-// =========================================
-// ====        Utility                  ====
-// =========================================
+void* arena_alloc_bytes(Arena* arena, size_t num_bytes);
 
 #define arena_available_space(arena)    ((arena)->size - (arena)->count)
 #define ARENA_VALIDATE(arena)           assert ((arena)->num_children == 0)
 
-// =========================================
-// ====            Reuse                ====
-// =========================================
-static void arena_reset(Arena* arena);
+// Empty arena
+void arena_reset(Arena* arena);
 
-// ==============================================
-// ====   Simple stack from arena            ====
-// ==== i.e. heap array with bounds checking ====
-// ==============================================
 
-/*
-    This is a heap array with bounds checking.
+// ====
+// Threads
+// ====
 
-    // Example: create an array of 10 elements of type Foo
-    Foo* array = arena_make_stack(arena, 10, Foo);
-    // Push into the array:
-    arena_stack_push(array, some_foo);
-    // Get the first element:
-    Foo* first = array[0];
-    // Loop:
-    for (int i = 0; i < arena_stack_count(array); ++i)
-    {
-        Foo* foo = array[i];
-        use_the_foo(foo);
-    }
-   */
 
-#define arena_make_stack(a, size, type) (type *)arena__stack_typeless(a, sizeof(type) * size)
-#define arena_stack_push(a, e) if (arena__stack_check(a)) a[arena__stack_header(a)->count - 1] = e
-#define arena_stack_reset(a) (arena__stack_header(a)->count = 0)
-#define arena_stack_count(a) (arena__stack_header(a)->count)
+// Platform-agnostic definitions.
+typedef struct SglMutex_s SglMutex;
+typedef struct SglSemaphore_s SglSemaphore;
 
-#pragma pack(push, 1)
-typedef struct
-{
-    size_t size;
-    size_t count;
-} StackHeader;
-#pragma pack(pop)
+int32_t          sgl_cpu_count(void);
+SglSemaphore*    sgl_create_semaphore(int32_t value);
+int32_t          sgl_semaphore_wait(SglSemaphore* sem);  // Will return non-zero on error
+int32_t          sgl_semaphore_signal(SglSemaphore* sem);
+SglMutex*        sgl_create_mutex(void);
+int32_t          sgl_mutex_lock(SglMutex* mutex);
+int32_t          sgl_mutex_unlock(SglMutex* mutex);
+void             sgl_destroy_mutex(SglMutex* mutex);
+void             sgl_create_thread(void (*thread_func)(void*), void* params);
 
-#define arena__stack_header(stack) ((StackHeader*)((uint8_t*)stack - sizeof(StackHeader)))
 
-static void* arena__stack_typeless(Arena* arena, size_t size)
-{
-    Arena child = arena_spawn(arena, size + sizeof(StackHeader));
-    StackHeader head = { 0 };
-    {
-        head.size = child.size;
-    }
-    memcpy(child.ptr, &head, sizeof(StackHeader));
-    return (void*)(((uint8_t*)child.ptr) + sizeof(StackHeader));
-}
+// ====
+// IO
+// ====
 
-static int32_t arena__stack_check(void* stack)
-{
-    StackHeader* head = arena__stack_header(stack);
-    if (head->size < (head->count + 1))
-    {
-        assert (!"Stack full");
-        return 0;
-    }
-    ++head->count;
-    return 1;
-}
 
-// =========================================
-//        Arena implementation
-// =========================================
 
-static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
+char*   sgl_slurp_file(const char* path, int64_t *out_size);  // Allocates and fills a whole file into memory.
+char**  sgl_split_lines(char* contents, int32_t* out_num_lines)  // Allocates *out_num_lines.
+int     sgl_count_lines(char* contents);
+
+
+// ==== Implementation
+
+
+#ifdef LIBSERG_IMPLEMENTATION
+
+
+void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
 {
     size_t total = arena->count + num_bytes;
-    if (total > arena->size)
-    {
+    if (total > arena->size) {
         return NULL;
     }
     void* result = arena->ptr + arena->count;
@@ -182,18 +149,17 @@ static void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
     return result;
 }
 
-static Arena arena_init(void* base, size_t size)
+Arena arena_init(void* base, size_t size)
 {
     Arena arena = { 0 };
     arena.ptr = (uint8_t*)base;
-    if (arena.ptr)
-    {
+    if (arena.ptr) {
         arena.size = size;
     }
     return arena;
 }
 
-static Arena arena_spawn(Arena* parent, size_t size)
+Arena arena_spawn(Arena* parent, size_t size)
 {
     uint8_t* ptr = (uint8_t*)arena_alloc_bytes(parent, size);
     assert(ptr);
@@ -207,7 +173,7 @@ static Arena arena_spawn(Arena* parent, size_t size)
     return child;
 }
 
-static Arena arena_push(Arena* parent, size_t size)
+Arena arena_push(Arena* parent, size_t size)
 {
     assert ( size <= arena_available_space(parent));
     Arena child = { 0 };
@@ -223,7 +189,7 @@ static Arena arena_push(Arena* parent, size_t size)
     return child;
 }
 
-static void arena_pop(Arena* child)
+void arena_pop(Arena* child)
 {
     Arena* parent = child->parent;
     assert(parent);
@@ -239,7 +205,7 @@ static void arena_pop(Arena* child)
     memset(child, 0, sizeof(Arena));
 }
 
-static void arena_reset(Arena* arena)
+void arena_reset(Arena* arena)
 {
     memset (arena->ptr, 0, arena->count);
     arena->count = 0;
@@ -249,19 +215,16 @@ static void arena_reset(Arena* arena)
 // THREADING
 // =================================================================================================
 
-// Platform-agnostic definitions.
-typedef struct SglMutex_s SglMutex;
-typedef struct SglSemaphore_s SglSemaphore;
 
-static int32_t          sgl_cpu_count();
-static SglSemaphore*    sgl_create_semaphore(int32_t value);
-static int32_t          sgl_semaphore_wait(SglSemaphore* sem);
-static int32_t          sgl_semaphore_signal(SglSemaphore* sem);
-static SglMutex*        sgl_create_mutex();
-static int32_t          sgl_mutex_lock(SglMutex* mutex);
-static int32_t          sgl_mutex_unlock(SglMutex* mutex);
-static void             sgl_destroy_mutex(SglMutex* mutex);
-static void             sgl_create_thread(void (*thread_func)(void*), void* params);
+int32_t          sgl_cpu_count(void);
+SglSemaphore*    sgl_create_semaphore(int32_t value);
+int32_t          sgl_semaphore_wait(SglSemaphore* sem);
+int32_t          sgl_semaphore_signal(SglSemaphore* sem);
+SglMutex*        sgl_create_mutex(void);
+int32_t          sgl_mutex_lock(SglMutex* mutex);
+int32_t          sgl_mutex_unlock(SglMutex* mutex);
+void             sgl_destroy_mutex(SglMutex* mutex);
+void             sgl_create_thread(void (*thread_func)(void*), void* params);
 
 // =================================
 // Windows
@@ -273,18 +236,16 @@ static void             sgl_create_thread(void (*thread_func)(void*), void* para
 
 #define SGL_MAX_SEMAPHORE_VALUE (1 << 16)
 
-struct SglMutex_s
-{
+struct SglMutex_s {
     CRITICAL_SECTION critical_section;
 };
 
-struct SglSemaphore_s
-{
+struct SglSemaphore_s {
     HANDLE  handle;
     LONG    value;
 };
 
-static int32_t sgl_cpu_count()
+int32_t sgl_cpu_count()
 {
     SYSTEM_INFO info;
     GetSystemInfo(&info);
@@ -292,13 +253,12 @@ static int32_t sgl_cpu_count()
     return count;
 }
 
-static SglSemaphore* sgl_create_semaphore(int32_t value)
+SglSemaphore* sgl_create_semaphore(int32_t value)
 {
     SglSemaphore* sem = (SglSemaphore*)sgl_malloc(sizeof(SglSemaphore));
     sem->handle = CreateSemaphore(0, value, SGL_MAX_SEMAPHORE_VALUE, NULL);
     sem->value = value;
-    if (!sem->handle)
-    {
+    if (!sem->handle) {
         sgl_free (sem);
         sem = NULL;
     }
@@ -306,7 +266,7 @@ static SglSemaphore* sgl_create_semaphore(int32_t value)
 }
 
 // Will return non-zero on error
-static int32_t sgl_semaphore_wait(SglSemaphore* sem)
+int32_t sgl_semaphore_wait(SglSemaphore* sem)
 {
     int32_t result;
 
@@ -314,61 +274,54 @@ static int32_t sgl_semaphore_wait(SglSemaphore* sem)
         return -1;
     }
 
-    switch (WaitForSingleObject(sem->handle, INFINITE))
-    {
+    switch (WaitForSingleObject(sem->handle, INFINITE)) {
     case WAIT_OBJECT_0:
-        {
-            InterlockedDecrement(&sem->value);
-            result = 0;
-            break;
-        }
+        InterlockedDecrement(&sem->value);
+        result = 0;
+        break;
     case WAIT_TIMEOUT:
-        {
-            result = -1;
-            break;
-        }
+        result = -1;
+        break;
     default:
-        {
-            result = -1;
-            break;
-        }
+        result = -1;
+        break;
     }
+
     return result;
 }
 
-static int32_t sgl_semaphore_signal(SglSemaphore* sem)
+int32_t sgl_semaphore_signal(SglSemaphore* sem)
 {
     InterlockedIncrement(&sem->value);
-    if (ReleaseSemaphore(sem->handle, 1, NULL) == FALSE)
-    {
+    if (ReleaseSemaphore(sem->handle, 1, NULL) == FALSE) {
         InterlockedDecrement(&sem->value);
         return -1;
     }
     return 0;
 }
 
-static SglMutex* sgl_create_mutex()
+SglMutex* sgl_create_mutex()
 {
     SglMutex* mutex = (SglMutex*) sgl_malloc(sizeof(SglMutex));
     InitializeCriticalSectionAndSpinCount(&mutex->critical_section, 2000);
     return mutex;
 }
 
-static int32_t sgl_mutex_lock(SglMutex* mutex)
+int32_t sgl_mutex_lock(SglMutex* mutex)
 {
     int32_t result = 0;
     EnterCriticalSection(&mutex->critical_section);
     return result;
 }
 
-static int32_t sgl_mutex_unlock(SglMutex* mutex)
+int32_t sgl_mutex_unlock(SglMutex* mutex)
 {
     int32_t result = 0;
     LeaveCriticalSection(&mutex->critical_section);
     return result;
 }
 
-static void sgl_destroy_mutex(SglMutex* mutex)
+void sgl_destroy_mutex(SglMutex* mutex)
 {
     if (mutex)
     {
@@ -377,7 +330,7 @@ static void sgl_destroy_mutex(SglMutex* mutex)
     }
 }
 
-static void sgl_create_thread(void (*thread_func)(void*), void* params)
+void sgl_create_thread(void (*thread_func)(void*), void* params)
 {
     _beginthread(thread_func, 0, params);
 }
@@ -398,11 +351,10 @@ static void sgl_create_thread(void (*thread_func)(void*), void* params)
 #include <sys/stat.h>
 #endif
 
-static int32_t sgl_cpu_count()
+int32_t sgl_cpu_count()
 {
     static int32_t sgli__cpu_count = -1;
-    if (sgli__cpu_count <= 0)
-    {
+    if (sgli__cpu_count <= 0) {
         sgli__cpu_count = (int32_t)sysconf(_SC_NPROCESSORS_ONLN);
     }
     assert (sgli__cpu_count >= 1);
@@ -414,7 +366,7 @@ struct SglSemaphore_s
     sem_t* sem;
 };
 
-static SglSemaphore* sgl_create_semaphore(int32_t value)
+SglSemaphore* sgl_create_semaphore(int32_t value)
 {
     SglSemaphore* sem = (SglSemaphore*)sgl_malloc(sizeof(SglSemaphore));
 #if defined(__linux__)
@@ -424,20 +376,19 @@ static SglSemaphore* sgl_create_semaphore(int32_t value)
     sem->sem = sem_open("sgl semaphore", O_CREAT, S_IRWXU, value);
     int err = (sem->sem == SEM_FAILED) ? -1 : 0;
 #endif
-    if (err < 0)
-    {
+    if (err < 0) {
         sgl_free(sem);
         return NULL;
     }
     return sem;
 }
 
-static int32_t sgl_semaphore_wait(SglSemaphore* sem)
+int32_t sgl_semaphore_wait(SglSemaphore* sem)
 {
     return sem_wait(sem->sem);
 }
 
-static int32_t sgl_semaphore_signal(SglSemaphore* sem)
+int32_t sgl_semaphore_signal(SglSemaphore* sem)
 {
     return sem_post(sem->sem);
 }
@@ -446,7 +397,7 @@ struct SglMutex_s
     pthread_mutex_t handle;
 };
 
-static SglMutex* sgl_create_mutex()
+SglMutex* sgl_create_mutex()
 {
     SglMutex* mutex = (SglMutex*) sgl_malloc(sizeof(SglMutex));
 
@@ -460,7 +411,7 @@ static SglMutex* sgl_create_mutex()
     return mutex;
 }
 
-static int32_t sgl_mutex_lock(SglMutex* mutex)
+int32_t sgl_mutex_lock(SglMutex* mutex)
 {
     if (pthread_mutex_lock(&mutex->handle) < 0)
     {
@@ -469,7 +420,7 @@ static int32_t sgl_mutex_lock(SglMutex* mutex)
     return 0;
 }
 
-static int32_t sgl_mutex_unlock(SglMutex* mutex)
+int32_t sgl_mutex_unlock(SglMutex* mutex)
 {
     if (pthread_mutex_unlock(&mutex->handle) < 0)
     {
@@ -479,13 +430,13 @@ static int32_t sgl_mutex_unlock(SglMutex* mutex)
     return 0;
 }
 
-static void sgl_destroy_mutex(SglMutex* mutex)
+void sgl_destroy_mutex(SglMutex* mutex)
 {
     pthread_mutex_destroy(&mutex->handle);
     sgl_free(mutex);
 }
 
-static void sgl_create_thread(void (*thread_func)(void*), void* params)
+void sgl_create_thread(void (*thread_func)(void*), void* params)
 {
     pthread_attr_t attr;
 
@@ -522,21 +473,19 @@ static const int sgli__bytes_in_fd(FILE* fd)
     return len;
 }
 
-static char* sgl_slurp_file(const char* path, size_t *out_size)
+char* sgl_slurp_file(const char* path, int64_t* out_size)
 {
     FILE* fd = fopen(path, "r");
-    if (!fd)
-    {
+    if (!fd) {
         fprintf(stderr, "ERROR: couldn't slurp %s\n", path);
         assert(fd);
         *out_size = 0;
         return NULL;
     }
-    int len = sgli__bytes_in_fd(fd);
+    int64_t len = sgli__bytes_in_fd(fd);
     char* contents = (char*)sgl_malloc(len + 1);
-    if (contents)
-    {
-        const size_t read = (int)fread((void*)contents, 1, (size_t)len, fd);
+    if (contents) {
+        const int64_t read = fread((void*)contents, 1, (size_t)len, fd);
         assert (read <= len);
         fclose(fd);
         *out_size = read + 1;
@@ -545,20 +494,46 @@ static char* sgl_slurp_file(const char* path, size_t *out_size)
     return contents;
 }
 
-static int sgl_count_lines(char* contents)
+int32_t sgl_count_lines(char* contents)
 {
-    int num_lines = 0;
+    int32_t num_lines = 0;
     int64_t len = strlen(contents);
-    for(int64_t i = 0; i < len; ++i)
-    {
-        if (contents[i] == '\n')
-        {
+    for(int64_t i = 0; i < len; ++i) {
+        if (contents[i] == '\n') {
             num_lines++;
         }
     }
     return num_lines;
 }
 
+char** sgl_split_lines(char* contents, int32_t* out_num_lines)
+{
+    int32_t num_lines = sgl_count_lines(contents);
+    char** result = (char**)calloc(num_lines, sizeof(char*));
+
+    char* line = contents;
+    for (int32_t line_i = 0; line_i < num_lines; ++line_i) {
+        int32_t line_length = 0;
+        char* iter = line;
+        while (*iter++ != '\n') {
+            ++line_length;
+        }
+        iter = line;
+        char* split = (char*)calloc(line_length + 1, sizeof(char));
+        memcpy(split, line, line_length);
+        line += line_length + 1;
+        result[line_i] = split;
+    }
+    *out_num_lines = num_lines;
+    return result;
+}
+
+
+#endif  // LIBSERG_IMPLEMENTATION
+
 #ifdef __cplusplus
 }
 #endif
+
+// HISTORY
+// 2015-09-25 -- Added LIBSERG_IMPLEMENTATION macro, sgl_split_lines()
