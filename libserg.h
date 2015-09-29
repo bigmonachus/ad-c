@@ -128,8 +128,8 @@ void             sgl_create_thread(void (*thread_func)(void*), void* params);
 
 
 char*   sgl_slurp_file(const char* path, int64_t *out_size);  // Allocates and fills a whole file into memory.
-char**  sgl_split_lines(char* contents, int32_t* out_num_lines)  // Allocates *out_num_lines.
-int     sgl_count_lines(char* contents);
+char**  sgl_split_lines(char* contents, int32_t* out_num_lines);  // Allocates *out_num_lines.
+int32_t sgl_count_lines(char* contents);
 
 
 // ==== Implementation
