@@ -33,6 +33,7 @@ extern "C"
 #include <assert.h>
 #endif
 
+#include <inttypes.h>
 #include <stdlib.h>  // memcpy
 #include <string.h>  // memset
 #include <stdint.h>
@@ -51,11 +52,42 @@ extern "C"
 #define sgl_calloc calloc
 #endif
 
+#ifndef sgl_realloc
+#define sgl_realloc realloc
+#endif
+
 #ifndef sgl_free
 #define sgl_free free
 #endif
 
+#ifndef sgl_log
+#ifdef _WIN32
+#define sgl_log sgl_win32_log
+#else
+#define sgl_log printf
+#endif
+#endif
+
 #define sgl_array_count(a) (sizeof((a))/sizeof((a)[0]))
+
+// ==== stb stretchy buffer, with slight modifications, like zeroing out memory.
+//  Shamelessly substituting stb_ for sgl_
+// -- Define SGL_OUT_OF_MEMORY to handle failures. Something like `#define SGL_OUT_OF_MEMORY panic("array failed\n")`
+#define sb_free(a)      ((a) ? sgl_free(sgl__sbraw(a)),0 : 0)
+#define sb_push(a,v)    (sgl__sbmaybegrow(a,1), (a)[sgl__sbcount(a)++] = (v))
+#define sb_count(a)     ((a) ? sgl__sbcount(a) : 0)
+#define sb_add(a,n)     (sgl__sbmaybegrow(a,n), sgl__sbcount(a)+=(n), &(a)[sgl__sbcount(a)-(n)])
+#define sb_last(a)      ((a)[sgl__sbcount(a)-1])
+#define sb_reset(a)     memset((a), 0, sizeof(*a)*sgl__sbcount(a)), sgl__sbcount(a) = 0
+
+#define sgl__sbraw(a)       ((int *) (a) - 2)
+#define sgl__sbcapacity(a)  sgl__sbraw(a)[0]
+#define sgl__sbcount(a)     sgl__sbraw(a)[1]
+
+#define sgl__sbneedgrow(a,n)  ((a)==0 || sgl__sbcount(a)+(n) >= sgl__sbcapacity(a))
+#define sgl__sbmaybegrow(a,n) (sgl__sbneedgrow(a,(n)) ? sgl__sbgrow(a,n) : 0)
+#define sgl__sbgrow(a,n)      ((a) = sgl__sb_grow_impl((a), (n), sizeof(*(a))))
+static void * sgl__sb_grow_impl(void *arr, int increment, int itemsize);
 
 
 // ====
@@ -79,10 +111,15 @@ struct Arena_s {
 
 // Create a root arena from a memory block.
 Arena arena_init(void* base, size_t size);
-// Create a child arena.
+
+#define  arena_alloc_elem(arena, T)         (T *)arena_alloc_bytes((arena), sizeof(T))
+#define  arena_alloc_array(arena, count, T) (T *)arena_alloc_bytes((arena), (count) * sizeof(T))
+#define  arena_available_space(arena)       ((arena)->size - (arena)->count)
+
+// Create an independent arena from existing arena.
 Arena arena_spawn(Arena* parent, size_t size);
 
-// ==== Temporary arenas.
+// -- Temporary arenas.
 // Usage:
 //      child = arena_push(my_arena, some_size);
 //      use_temporary_arena(&child.arena);
@@ -90,11 +127,8 @@ Arena arena_spawn(Arena* parent, size_t size);
 Arena    arena_push(Arena* parent, size_t size);
 void     arena_pop (Arena* child);
 
-#define      arena_alloc_elem(arena, T)         (T *)arena_alloc_bytes((arena), sizeof(T))
-#define      arena_alloc_array(arena, count, T) (T *)arena_alloc_bytes((arena), (count) * sizeof(T))
 void* arena_alloc_bytes(Arena* arena, size_t num_bytes);
 
-#define arena_available_space(arena)    ((arena)->size - (arena)->count)
 #define ARENA_VALIDATE(arena)           assert ((arena)->num_children == 0)
 
 // Empty arena
@@ -110,32 +144,67 @@ void arena_reset(Arena* arena);
 typedef struct SglMutex_s SglMutex;
 typedef struct SglSemaphore_s SglSemaphore;
 
-int32_t          sgl_cpu_count(void);
-SglSemaphore*    sgl_create_semaphore(int32_t value);
-int32_t          sgl_semaphore_wait(SglSemaphore* sem);  // Will return non-zero on error
-int32_t          sgl_semaphore_signal(SglSemaphore* sem);
-SglMutex*        sgl_create_mutex(void);
-int32_t          sgl_mutex_lock(SglMutex* mutex);
-int32_t          sgl_mutex_unlock(SglMutex* mutex);
-void             sgl_destroy_mutex(SglMutex* mutex);
-void             sgl_create_thread(void (*thread_func)(void*), void* params);
+int32_t         sgl_cpu_count(void);
+SglSemaphore*   sgl_create_semaphore(int32_t value);
+int32_t         sgl_semaphore_wait(SglSemaphore* sem);  // Will return non-zero on error
+int32_t         sgl_semaphore_signal(SglSemaphore* sem);
+SglMutex*       sgl_create_mutex(void);
+int32_t         sgl_mutex_lock(SglMutex* mutex);
+int32_t         sgl_mutex_unlock(SglMutex* mutex);
+void            sgl_destroy_mutex(SglMutex* mutex);
+void            sgl_create_thread(void (*thread_func)(void*), void* params);
 
 
 // ====
 // IO
+// -- Small functions for simple text processing. Meant for script-like programs.
+// ====
+
+// All of the text manipulations allocate new memory, they don't modify the original input
+
+char*   sgl_slurp_file(const char* path, int64_t *out_size);
+char**  sgl_split_lines(char* contents, int32_t* out_num_lines);
+char**  sgl_tokenize(char* string, char* separator);
+char*   sgl_strip_whitespace(char* in);
+int32_t sgl_count_lines(char* contents);
+
+
+// ====
+// Windows helpers
 // ====
 
 
-
-char*   sgl_slurp_file(const char* path, int64_t *out_size);  // Allocates and fills a whole file into memory.
-char**  sgl_split_lines(char* contents, int32_t* out_num_lines);  // Allocates *out_num_lines.
-int32_t sgl_count_lines(char* contents);
+#ifdef _WIN32
+#include <windows.h>
+// print to win console
+void sgl_win32_log(char *format, ...);
+#endif
 
 
 // ==== Implementation
 
 
 #ifdef LIBSERG_IMPLEMENTATION
+
+static void* sgl__sb_grow_impl(void *arr, int increment, int itemsize)
+{
+    int dbl_cur = arr ? 2*sgl__sbcapacity(arr) : 0;
+    int min_needed = sb_count(arr) + increment;
+    int m = dbl_cur > min_needed ? dbl_cur : min_needed;
+    int *p = (int *) sgl_realloc(arr ? sgl__sbraw(arr) : 0, itemsize * m + sizeof(int)*2);
+    if (p) {
+        if (!arr) {
+            p[1] = 0;
+        }
+        p[0] = m;
+        return p + 2;
+    } else {
+#ifdef SGL_OUT_OF_MEMORY
+        SGL_OUT_OF_MEMORY;
+#endif
+        return (void *) (2*sizeof(int)); // try to force a NULL pointer exception later
+    }
+}
 
 
 void* arena_alloc_bytes(Arena* arena, size_t num_bytes)
@@ -509,7 +578,7 @@ int32_t sgl_count_lines(char* contents)
 char** sgl_split_lines(char* contents, int32_t* out_num_lines)
 {
     int32_t num_lines = sgl_count_lines(contents);
-    char** result = (char**)calloc(num_lines, sizeof(char*));
+    char** result = (char**)sgl_calloc(num_lines, sizeof(char*));
 
     char* line = contents;
     for (int32_t line_i = 0; line_i < num_lines; ++line_i) {
@@ -519,7 +588,7 @@ char** sgl_split_lines(char* contents, int32_t* out_num_lines)
             ++line_length;
         }
         iter = line;
-        char* split = (char*)calloc(line_length + 1, sizeof(char));
+        char* split = (char*)sgl_calloc(line_length + 1, sizeof(char));
         memcpy(split, line, line_length);
         line += line_length + 1;
         result[line_i] = split;
@@ -527,6 +596,74 @@ char** sgl_split_lines(char* contents, int32_t* out_num_lines)
     *out_num_lines = num_lines;
     return result;
 }
+
+char** sgl_tokenize(char* string, char* separator)
+{
+    char** token_array = NULL;
+
+    char* tok_begin = string;
+    char* tok_iter = string;
+    int32_t tok_len = 0;
+    while (*tok_begin != '\0') {
+        char* sep_iter = separator;
+        while (*sep_iter == *tok_iter++) { ++sep_iter; }
+        if (*sep_iter == '\0' || *(tok_iter - 1) == '\0') {
+            // Push token.
+            if ( tok_len ) {
+                char* new_tok = (char*) sgl_calloc(tok_len + 1, sizeof(char));
+                memcpy(new_tok, tok_begin, tok_len);
+                sb_push(token_array, new_tok);
+            }
+            tok_len = 0;
+            tok_begin = --tok_iter;
+        } else {
+            ++tok_len;
+        }
+    }
+    return token_array;
+}
+
+char* sgl_strip_whitespace(char* in)
+{
+    char* str = (char*)calloc(strlen(in) + 1, sizeof(char));
+    memcpy(str, in, strlen(in));  // terminating 0 from calloc ;)
+    char* i = str;
+    char* begin = NULL;
+    while(isspace(*i++)) { }
+    begin = i - 1;
+
+    char* end = begin;
+    while(*end++ != '\0') {}
+    --end;
+    while(isspace(*end)) {
+        *end-- = '\0';
+    }
+
+    return begin;
+}
+
+#ifdef _WIN32
+void sgl_win32_log(char *format, ...)
+{
+    static char message[ 1024 ];
+
+    int num_bytes_written = 0;
+
+    va_list args;
+
+    assert ( format );
+
+    va_start( args, format );
+
+    num_bytes_written = _vsnprintf(message, sizeof( message ) - 1, format, args);
+
+    if ( num_bytes_written > 0 ) {
+        OutputDebugStringA( message );
+    }
+
+    va_end( args );
+}
+#endif
 
 
 #endif  // LIBSERG_IMPLEMENTATION
