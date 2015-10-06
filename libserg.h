@@ -39,6 +39,11 @@ extern "C"
 #include <stdint.h>
 #include <stdio.h>
 
+// ====
+// typedefs
+// ====
+
+typedef uint32_t sglBool ;
 
 // ====
 // MACROS
@@ -625,7 +630,7 @@ char** sgl_tokenize(char* string, char* separator)
 
 char* sgl_strip_whitespace(char* in)
 {
-    char* str = (char*)calloc(strlen(in) + 1, sizeof(char));
+    char* str = (char*)sgl_calloc(strlen(in) + 1, sizeof(char));
     memcpy(str, in, strlen(in));  // terminating 0 from calloc ;)
     char* i = str;
     char* begin = NULL;
@@ -640,6 +645,23 @@ char* sgl_strip_whitespace(char* in)
     }
 
     return begin;
+}
+
+sglBool sgl_is_number(char* s)
+{
+    sglBool ok = 1;
+
+    if (*s == '-' || *s == '+') {
+        ++s;
+    }
+    for(;*s != '\0';++s) {
+        if (!isdigit(*s)) {
+            ok = 0;
+            break;
+        }
+    }
+
+    return ok;
 }
 
 #ifdef _WIN32
