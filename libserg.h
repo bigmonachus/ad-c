@@ -58,7 +58,7 @@ extern "C"
 #endif
 
 #ifndef sgl_free
-#define sgl_free free
+#define sgl_free(p) if ((p)) { free(p); (p) = NULL; }
 #endif
 
 #ifndef sgl_log
@@ -99,9 +99,9 @@ static void * sgl__sb_grow_impl(void *arr, int increment, int itemsize);
 typedef struct Arena_s Arena;
 struct Arena_s {
     // Memory:
-    size_t  size;
-    size_t  count;
-    uint8_t*     ptr;
+    size_t      size;
+    size_t      count;
+    uint8_t*    ptr;
 
     // For pushing/popping
     Arena*      parent;
