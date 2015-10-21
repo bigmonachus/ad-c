@@ -69,6 +69,13 @@ extern "C"
 #endif
 #endif
 
+#ifndef min
+#define min(a, b) ((a) < (b)) ? (a) : (b)
+#endif  // min
+#ifndef max
+#define max(a, b) ((a) > (b)) ? (a) : (b)
+#endif  // min
+
 #define sgl_array_count(a) (sizeof((a))/sizeof((a)[0]))
 
 // ==== stb stretchy buffer, with slight modifications, like zeroing out memory.
