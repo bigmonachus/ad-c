@@ -540,7 +540,7 @@ void sgl_create_thread(void (*thread_func)(void*), void* params)
 // IO
 // =================================================================================================
 
-static const int sgli__bytes_in_fd(FILE* fd)
+static int sgli__bytes_in_fd(FILE* fd)
 {
     fpos_t fd_pos;
     fgetpos(fd, &fd_pos);
