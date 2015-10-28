@@ -333,11 +333,15 @@ int32_t sgl_cpu_count()
 SglSemaphore* sgl_create_semaphore(int32_t value)
 {
     SglSemaphore* sem = (SglSemaphore*)sgl_malloc(sizeof(SglSemaphore));
-    sem->handle = CreateSemaphore(0, value, SGL_MAX_SEMAPHORE_VALUE, NULL);
-    sem->value = value;
-    if (!sem->handle) {
-        sgl_free (sem);
-        sem = NULL;
+    if (sem) {
+        sem->handle = CreateSemaphore(0, value, SGL_MAX_SEMAPHORE_VALUE, NULL);
+        sem->value = value;
+        if (!sem->handle) {
+            sgl_free (sem);
+            sem = NULL;
+        }
+    } else {
+        // TODO: out of memory macro
     }
     return sem;
 }
@@ -380,7 +384,9 @@ int32_t sgl_semaphore_signal(SglSemaphore* sem)
 SglMutex* sgl_create_mutex()
 {
     SglMutex* mutex = (SglMutex*) sgl_malloc(sizeof(SglMutex));
-    InitializeCriticalSectionAndSpinCount(&mutex->critical_section, 2000);
+    if (mutex) {
+        InitializeCriticalSectionAndSpinCount(&mutex->critical_section, 2000);
+    }
     return mutex;
 }
 
@@ -587,20 +593,27 @@ char** sgl_split_lines(char* contents, int32_t* out_num_lines)
 {
     int32_t num_lines = sgl_count_lines(contents);
     char** result = (char**)sgl_calloc(num_lines, sizeof(char*));
-
-    char* line = contents;
-    for (int32_t line_i = 0; line_i < num_lines; ++line_i) {
-        int32_t line_length = 0;
-        char* iter = line;
-        while (*iter++ != '\n') {
-            ++line_length;
+    if (result) {
+        char* line = contents;
+        for (int32_t line_i = 0; line_i < num_lines; ++line_i) {
+            int32_t line_length = 0;
+            char* iter = line;
+            while (*iter++ != '\n') {
+                ++line_length;
+            }
+            char* split = (char*)sgl_calloc(line_length + 1, sizeof(char));
+            if ( split ) {
+                memcpy(split, line, line_length);
+                line += line_length + 1;
+                result[line_i] = split;
+            } else {
+                // TODO: out-of-memory callback...
+            }
         }
-        char* split = (char*)sgl_calloc(line_length + 1, sizeof(char));
-        memcpy(split, line, line_length);
-        line += line_length + 1;
-        result[line_i] = split;
+        *out_num_lines = num_lines;
+    } else {
+        // TODO: out-of-memory callback...
     }
-    *out_num_lines = num_lines;
     return result;
 }
 
@@ -633,20 +646,23 @@ char** sgl_tokenize(char* string, char* separator)
 char* sgl_strip_whitespace(char* in)
 {
     char* str = (char*)sgl_calloc(strlen(in) + 1, sizeof(char));
-    memcpy(str, in, strlen(in));  // terminating 0 from calloc ;)
-    char* i = str;
-    char* begin = NULL;
-    while(isspace(*i++)) { }
-    begin = i - 1;
+    unsigned char* begin = NULL;
+    if ( str ) {
+        memcpy(str, in, strlen(in));  // terminating 0 from calloc ;)
+        unsigned char* i = (unsigned char*)str;
+        while(isspace(*i++)) { }
+        begin = i - 1;
 
-    char* end = begin;
-    while(*end++ != '\0') {}
-    --end;
-    while(isspace(*end)) {
-        *end-- = '\0';
+        unsigned char* end = begin;
+        while(*end++ != '\0') {}
+        --end;
+        while(isspace(*end)) {
+            *end-- = '\0';
+        }
+    } else {
+        // TODO: out-of-memory callback
     }
-
-    return begin;
+    return (char*)begin;
 }
 
 int sgl_is_number(char* s)
@@ -657,7 +673,7 @@ int sgl_is_number(char* s)
         ++s;
     }
     for(;*s != '\0';++s) {
-        if (!isdigit(*s)) {
+        if (!isdigit((unsigned char)*s)) {
             ok = 0;
             break;
         }
