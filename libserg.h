@@ -595,7 +595,6 @@ char** sgl_split_lines(char* contents, int32_t* out_num_lines)
         while (*iter++ != '\n') {
             ++line_length;
         }
-        iter = line;
         char* split = (char*)sgl_calloc(line_length + 1, sizeof(char));
         memcpy(split, line, line_length);
         line += line_length + 1;
@@ -670,7 +669,7 @@ int sgl_is_number(char* s)
 #ifdef _WIN32
 void sgl_win32_log(char *format, ...)
 {
-    static char message[ 1024 ];
+    static char message[4096];
 
     int num_bytes_written = 0;
 
