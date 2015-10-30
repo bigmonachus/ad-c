@@ -29,6 +29,10 @@ extern "C"
 {
 #endif
 
+#if defined(__linux__)
+#define _BSD_SOURCE  // to get usleep with -std=c99
+#endif
+
 #ifndef assert
 #include <assert.h>
 #endif
@@ -429,13 +433,21 @@ void sgl_create_thread(void (*thread_func)(void*), void* params)
 // Start of Linux
 // =================================
 #elif defined(__linux__) || defined(__MACH__)
+
+#include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <unistd.h>
+
 #if defined(__MACH__)
 #include <fcntl.h>
 #include <sys/stat.h>
 #endif
+
+void sgl_usleep(int32_t us)
+{
+    __useconds_t u = (__useconds_t)us;
+    usleep(u);
+}
 
 int32_t sgl_cpu_count()
 {
