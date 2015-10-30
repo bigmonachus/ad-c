@@ -34,7 +34,9 @@ extern "C"
 #endif
 
 #include <ctype.h>
+#include <float.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdlib.h>  // memcpy
 #include <string.h>  // memset
 #include <stdint.h>
@@ -161,6 +163,7 @@ int32_t         sgl_mutex_lock(SglMutex* mutex);
 int32_t         sgl_mutex_unlock(SglMutex* mutex);
 void            sgl_destroy_mutex(SglMutex* mutex);
 void            sgl_create_thread(void (*thread_func)(void*), void* params);
+void            sgl_usleep(int32_t us);
 
 
 // ====
@@ -289,19 +292,8 @@ void arena_reset(Arena* arena)
 }
 
 // =================================================================================================
-// THREADING
+// THREADING implementation
 // =================================================================================================
-
-
-int32_t          sgl_cpu_count(void);
-SglSemaphore*    sgl_create_semaphore(int32_t value);
-int32_t          sgl_semaphore_wait(SglSemaphore* sem);
-int32_t          sgl_semaphore_signal(SglSemaphore* sem);
-SglMutex*        sgl_create_mutex(void);
-int32_t          sgl_mutex_lock(SglMutex* mutex);
-int32_t          sgl_mutex_unlock(SglMutex* mutex);
-void             sgl_destroy_mutex(SglMutex* mutex);
-void             sgl_create_thread(void (*thread_func)(void*), void* params);
 
 // =================================
 // Windows
@@ -328,6 +320,17 @@ int32_t sgl_cpu_count()
     GetSystemInfo(&info);
     int32_t count = info.dwNumberOfProcessors;
     return count;
+}
+
+void sgl_usleep(int32_t us)
+{
+    HANDLE timer;
+    LARGE_INTEGER ft;
+    ft.QuadPart = -(10*us);
+    timer = CreateWaitableTimer(NULL, TRUE, NULL);
+    SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
+    WaitForSingleObject(timer, INFINITE);
+    CloseHandle(timer);
 }
 
 SglSemaphore* sgl_create_semaphore(int32_t value)
