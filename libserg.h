@@ -168,6 +168,7 @@ int32_t         sgl_mutex_unlock(SglMutex* mutex);
 void            sgl_destroy_mutex(SglMutex* mutex);
 void            sgl_create_thread(void (*thread_func)(void*), void* params);
 void            sgl_usleep(int32_t us);
+#define         sgl_memory_barrier() SGL_MEMORY_BARRIER_PLAT_  // No reads or writes before or after this call.
 
 
 // ====
@@ -318,6 +319,9 @@ struct SglSemaphore_s {
     LONG    value;
 };
 
+
+#define SGL_MEMORY_BARRIER_PLAT_ MemoryBarrier()
+
 int32_t sgl_cpu_count()
 {
     SYSTEM_INFO info;
@@ -442,6 +446,8 @@ void sgl_create_thread(void (*thread_func)(void*), void* params)
 #include <fcntl.h>
 #include <sys/stat.h>
 #endif
+
+#define SGL_MEMORY_BARRIER_PLAT_  __asm__ __volatile__("" : : : "memory")
 
 void sgl_usleep(int32_t us)
 {
