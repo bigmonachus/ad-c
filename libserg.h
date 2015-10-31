@@ -64,7 +64,7 @@ extern "C"
 #endif
 
 #ifndef sgl_free
-#define sgl_free(p) if ((p)) { free(p); (p) = NULL; }
+#define sgl_free(p) { if (p) { free(p); (p) = NULL; } }
 #endif
 
 #ifndef sgl_log
@@ -582,7 +582,6 @@ char* sgl_slurp_file(const char* path, int64_t* out_size)
     FILE* fd = fopen(path, "r");
     if (!fd) {
         fprintf(stderr, "ERROR: couldn't slurp %s\n", path);
-        assert(fd);
         *out_size = 0;
         return NULL;
     }
