@@ -451,8 +451,12 @@ void sgl_create_thread(void (*thread_func)(void*), void* params)
 
 void sgl_usleep(int32_t us)
 {
+#if defined(__linux__)
     __useconds_t u = (__useconds_t)us;
+#elif defined(__MACH__)
+    useconds_t u = (useconds_t)us;
     usleep(u);
+#endif
 }
 
 int32_t sgl_cpu_count()
